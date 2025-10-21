@@ -107,5 +107,3 @@ La aplicación se conecta a un servidor central que guarda la información y ges
 - Procesamiento y almacenamiento de preguntas.  
 - Envío de notificaciones push.  
 - Gestión de pagos y suscripciones.
-
-**Diagrama simplificado:**
