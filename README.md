@@ -89,7 +89,6 @@ Son las limitaciones o condiciones que deben cumplirse durante el desarrollo del
 - El presupuesto inicial máximo es de **$30 millones COP**.  
 - Solo se contará con **un pediatra principal** durante la primera fase.  
 - La app debe cumplir con las normas de protección de datos vigentes en Colombia.  
-- Se desarrollará primero una **versión web** antes de la versión móvil para optimizar recursos.
 
 ---
 
