@@ -107,3 +107,5 @@ La aplicación se conecta a un servidor central que guarda la información y ges
 - Procesamiento y almacenamiento de preguntas.  
 - Envío de notificaciones push.  
 - Gestión de pagos y suscripciones.
+
+- Figma: https://www.figma.com/design/qYmGtGlEdOoFGz77PXvScW/Pediatria-App?node-id=0-1&t=xpnKgAU3lZpYO47a-1
