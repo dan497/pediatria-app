@@ -1041,10 +1041,6 @@ return (
               {faqs.slice(0, 3).map((faq) => (
                 <View key={faq.id} style={styles.faqItem}>
                   <View style={styles.faqQuestionRow}>
-                    <Image
-                      source={{ uri: getFaqAvatarUrl(faq.question) }}
-                      style={styles.faqIcon}
-                    />
                     <Text style={styles.faqQuestionText}>{faq.question}</Text>
                   </View>
                   <Text style={styles.faqAnswerText}>{faq.answer}</Text>
