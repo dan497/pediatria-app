@@ -40,6 +40,7 @@ const COLOMBIAN_CITIES = [
   "Sincelejo",
   "Valledupar",
   "Popayán",
+  "Mosquera",
 ];
 
 export default function RegisterScreen() {

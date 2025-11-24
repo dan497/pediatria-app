@@ -192,6 +192,12 @@ type VaccineDose = {
 
 type VaccineRecords = Record<string, boolean>;
 
+type FAQ = {
+  id: string;
+  question: string;
+  answer: string;
+};
+
 const VACCINE_DOSES: VaccineDose[] = [
   // BCG
   { id: "bcg_birth", vaccine: "BCG", ageLabel: "Nacimiento", ageMonths: 0 },
@@ -445,9 +451,57 @@ export default function HomeScreen() {
   const [savingArticle, setSavingArticle] = useState(false);
   const [uploadingArticleImage, setUploadingArticleImage] = useState(false);
 
+  // esto es lo de la ia y las preguntas frecuentes sjakasjska
+
+  const [faqs, setFaqs] = useState<FAQ[]>([]);
+  const [faqsLoading, setFaqsLoading] = useState(false);
+  const [faqsError, setFaqsError] = useState<string | null>(null);
   // animación / gesto para sheet del artículo
   const translateY = useRef(new Animated.Value(0)).current;
   const scrollOffsetY = useRef(0);
+
+// 👇 añade este useEffect DENTRO del componente HomeScreen
+useEffect(() => {
+  const loadFaqsFromAI = async () => {
+    try {
+      setFaqsLoading(true);
+      setFaqsError(null);
+
+      const ageParam =
+        childAgeMonths != null ? `?ageMonths=${childAgeMonths}` : "";
+      const res = await fetch(
+        "https://getfaqs-kpk5ufs2qq-uc.a.run.app" + ageParam
+      );
+
+      if (!res.ok) {
+        // si quieres ver el mensaje real:
+        let details = "";
+        try {
+          const txt = await res.text();
+          details = txt;
+        } catch {}
+        throw new Error(
+          `Error al cargar FAQs (status ${res.status}): ${details}`
+        );
+      }
+
+      const data: FAQ[] = await res.json();
+      setFaqs(data);
+    } catch (e: any) {
+      console.log("Error cargando FAQs IA:", e);
+      setFaqsError(
+        e?.message || "No se pudieron cargar las preguntas frecuentes."
+      );
+    } finally {
+      setFaqsLoading(false);
+    }
+  };
+
+  // opcional: no llames si no hay edad
+  // if (childAgeMonths == null) return;
+
+  loadFaqsFromAI();
+}, [childAgeMonths]); // o [] si quieres que se ejecute solo una vez
 
   const closeArticleDetail = () => {
     Animated.spring(translateY, {
@@ -786,468 +840,496 @@ export default function HomeScreen() {
     setArticleDetailVisible(true);
   };
 
-  return (
-    <View style={styles.container}>
-      <ScrollView contentContainerStyle={styles.content}>
-        <Text style={styles.greeting}>Hola, {firstName}</Text>
-        <Text style={styles.subtitle}>
-          {isDoctor
-            ? "Comparte artículos con las familias."
-            : "Explora recomendaciones de nuestros pediatras."}
-        </Text>
 
-        {/* Carrusel de artículos */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.articlesRow}
-        >
-          {isDoctor && (
+
+return (
+  <View style={styles.container}>
+    <ScrollView contentContainerStyle={styles.content}>
+      <Text style={styles.greeting}>Hola, {firstName}</Text>
+      <Text style={styles.subtitle}>
+        {isDoctor
+          ? "Comparte artículos con las familias."
+          : "Explora recomendaciones de nuestros pediatras."}
+      </Text>
+
+      {/* Carrusel de artículos */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.articlesRow}
+      >
+        {isDoctor && (
+          <TouchableOpacity
+            style={styles.newArticleCard}
+            onPress={openArticleModal}
+          >
+            <Ionicons name="add" size={32} color="#4B5563" />
+            <Text style={styles.newArticleText}>Nuevo artículo</Text>
+          </TouchableOpacity>
+        )}
+
+        {articlesLoading ? (
+          <View style={styles.articlesLoading}>
+            <ActivityIndicator size="small" color="#6B7280" />
+            <Text style={styles.articlesLoadingText}>
+              Cargando artículos…
+            </Text>
+          </View>
+        ) : articles.length === 0 ? (
+          <View style={styles.emptyArticlesCard}>
+            <Text style={styles.emptyArticlesText}>
+              Aún no hay artículos publicados.
+            </Text>
+          </View>
+        ) : (
+          articles.map((article) => (
             <TouchableOpacity
-              style={styles.newArticleCard}
-              onPress={openArticleModal}
+              key={article.id}
+              activeOpacity={0.9}
+              style={styles.articleCard}
+              onPress={() => openArticleDetail(article)}
             >
-              <Ionicons name="add" size={32} color="#4B5563" />
-              <Text style={styles.newArticleText}>Nuevo artículo</Text>
-            </TouchableOpacity>
-          )}
-
-          {articlesLoading ? (
-            <View style={styles.articlesLoading}>
-              <ActivityIndicator size="small" color="#6B7280" />
-              <Text style={styles.articlesLoadingText}>
-                Cargando artículos…
-              </Text>
-            </View>
-          ) : articles.length === 0 ? (
-            <View style={styles.emptyArticlesCard}>
-              <Text style={styles.emptyArticlesText}>
-                Aún no hay artículos publicados.
-              </Text>
-            </View>
-          ) : (
-            articles.map((article) => (
-              <TouchableOpacity
-                key={article.id}
-                activeOpacity={0.9}
-                style={styles.articleCard}
-                onPress={() => openArticleDetail(article)}
-              >
-                {article.imageUrl ? (
-                  <Image
-                    source={{ uri: article.imageUrl }}
-                    style={styles.articleImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.articleImagePlaceholder}>
-                    <Ionicons
-                      name="image-outline"
-                      size={28}
-                      color="#9CA3AF"
-                    />
-                  </View>
-                )}
-
-                <LinearGradient
-                  colors={["transparent", "rgba(0,0,0,0.8)"]}
-                  style={styles.articleGradient}
+              {article.imageUrl ? (
+                <Image
+                  source={{ uri: article.imageUrl }}
+                  style={styles.articleImage}
+                  resizeMode="cover"
                 />
-
-                <View style={styles.articleTitleContainer}>
-                  <Text style={styles.articleTitleOverlay} numberOfLines={2}>
-                    {article.title}
-                  </Text>
+              ) : (
+                <View style={styles.articleImagePlaceholder}>
+                  <Ionicons
+                    name="image-outline"
+                    size={28}
+                    color="#9CA3AF"
+                  />
                 </View>
-              </TouchableOpacity>
-            ))
-          )}
-        </ScrollView>
+              )}
 
-        {/* Crecimiento y desarrollo */}
-        <View style={styles.growthCard}>
-          <View style={styles.growthHeaderRow}>
+              <LinearGradient
+                colors={["transparent", "rgba(0,0,0,0.8)"]}
+                style={styles.articleGradient}
+              />
+
+              <View style={styles.articleTitleContainer}>
+                <Text style={styles.articleTitleOverlay} numberOfLines={2}>
+                  {article.title}
+                </Text>
+              </View>
+            </TouchableOpacity>
+          ))
+        )}
+      </ScrollView>
+
+      {/* Crecimiento y desarrollo */}
+      <View style={styles.growthCard}>
+        <View style={styles.growthHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.growthTitle}>Crecimiento y desarrollo</Text>
+            <Text style={styles.growthSubtitle}>
+              {childAgeMonths !== null
+                ? `Edad aproximada: ${childAgeMonths} meses`
+                : "Completa la fecha de nacimiento en el perfil para ver estos recordatorios."}
+            </Text>
+          </View>
+
+          <TouchableOpacity
+            onPress={() => router.push("/crecimiento")}
+            style={styles.growthLink}
+          >
+            <Text style={styles.growthLinkText}>Ver detalle</Text>
+            <Ionicons name="chevron-forward" size={16} color="#111827" />
+          </TouchableOpacity>
+        </View>
+
+        {currentGrowthVisit && (
+          <View style={styles.growthBodyRow}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.growthTitle}>Crecimiento y desarrollo</Text>
-              <Text style={styles.growthSubtitle}>
-                {childAgeMonths !== null
-                  ? `Edad aproximada: ${childAgeMonths} meses`
-                  : "Completa la fecha de nacimiento en el perfil para ver estos recordatorios."}
+              <Text style={styles.growthCurrentLabel}>
+                {currentGrowthVisit.label}
+              </Text>
+              <Text style={styles.growthCurrentDescription}>
+                {growthDone
+                  ? "Marcaste esta cita como realizada."
+                  : "Recuerda agendar tu cita de crecimiento y desarrollo."}
               </Text>
             </View>
 
             <TouchableOpacity
-              onPress={() => router.push("/crecimiento")}
-              style={styles.growthLink}
+              style={styles.growthCheckButton}
+              onPress={handleToggleGrowth}
             >
-              <Text style={styles.growthLinkText}>Ver detalle</Text>
               <Ionicons
-                name="chevron-forward"
-                size={16}
-                color="#111827"
+                name={growthDone ? "checkmark-circle" : "ellipse-outline"}
+                size={26}
+                color={growthDone ? "#16a34a" : "#4B5563"}
               />
             </TouchableOpacity>
           </View>
+        )}
+      </View>
 
-          {currentGrowthVisit && (
-            <View style={styles.growthBodyRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.growthCurrentLabel}>
-                  {currentGrowthVisit.label}
-                </Text>
-                <Text style={styles.growthCurrentDescription}>
-                  {growthDone
-                    ? "Marcaste esta cita como realizada."
-                    : "Recuerda agendar tu cita de crecimiento y desarrollo."}
-                </Text>
+      {/* Resumen de vacunas */}
+      <View style={styles.vaccinesCard}>
+        <View style={styles.vaccinesHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.vaccinesTitle}>Vacunas</Text>
+            <Text style={styles.vaccinesSubtitle}>
+              {childAgeMonths !== null
+                ? `Edad aproximada: ${childAgeMonths} meses`
+                : "Completa la fecha de nacimiento en el perfil para ver el esquema."}
+            </Text>
+          </View>
+
+          <TouchableOpacity onPress={() => router.push("/vacunas")}>
+            <View style={styles.vaccinesLink}>
+              <Text style={styles.vaccinesLinkText}>Ver detalle</Text>
+              <Ionicons name="chevron-forward" size={16} color="#111827" />
+            </View>
+          </TouchableOpacity>
+        </View>
+
+        <View style={styles.vaccinesSummaryRow}>
+          <View style={styles.vaccinesSummaryItem}>
+            <Text style={styles.vaccinesSummaryNumber}>{pendingCount}</Text>
+            <Text style={styles.vaccinesSummaryLabel}>dosis pendientes</Text>
+          </View>
+          <View style={[styles.vaccinesSummaryItem, { flex: 2 }]}>
+            <Text style={styles.vaccinesNextLabel}>Próxima vacuna</Text>
+            <Text style={styles.vaccinesNextValue}>
+              {nextDoseDescription}
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      {/* Preguntas frecuentes (IA) */}
+      <View style={styles.faqCard}>
+        <View style={styles.faqHeaderRow}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.faqTitle}>Preguntas frecuentes</Text>
+            <Text style={styles.faqSubtitle}>
+              Respuestas generadas con IA según la edad de tu peque.
+            </Text>
+          </View>
+
+          <Ionicons name="help-circle-outline" size={22} color="#4B5563" />
+        </View>
+
+        {faqsLoading ? (
+          <View style={styles.faqLoadingBox}>
+            <ActivityIndicator size="small" color="#6B7280" />
+            <Text style={styles.faqLoadingText}>
+              Buscando respuestas para ti…
+            </Text>
+          </View>
+        ) : faqsError ? (
+          <Text style={styles.faqErrorText}>{faqsError}</Text>
+        ) : faqs.length === 0 ? (
+          <Text style={styles.faqEmptyText}>
+            Aún no tenemos preguntas frecuentes para mostrar. Vuelve más
+            tarde o haz tu propia pregunta.
+          </Text>
+        ) : (
+          <View style={styles.faqList}>
+            {faqs.slice(0, 3).map((faq) => (
+              <View key={faq.id} style={styles.faqItem}>
+                <View style={styles.faqQuestionRow}>
+                  <View style={styles.faqBullet} />
+                  <Text style={styles.faqQuestionText}>{faq.question}</Text>
+                </View>
+                <Text style={styles.faqAnswerText}>{faq.answer}</Text>
               </View>
+            ))}
+          </View>
+        )}
+      </View>
+
+      {/* Botón Haz tu pregunta */}
+      <TouchableOpacity style={styles.mainButton} onPress={openQuestionModal}>
+        <Text style={styles.mainButtonText}>Haz tu pregunta</Text>
+      </TouchableOpacity>
+    </ScrollView>
+
+    {/* MODAL DE CONSENTIMIENTO */}
+    <Modal
+      visible={consentVisible}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setConsentVisible(false)}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.consentBox}>
+            <Text style={styles.consentTitle}>Consentimiento</Text>
+            <Text style={styles.consentIntro}>
+              Antes de continuar, por favor lee y acepta estas condiciones:
+            </Text>
+
+            <View style={styles.consentList}>
+              <Text style={styles.consentItem}>
+                • Acepto que la información recibida es orientación general.
+              </Text>
+              <Text style={styles.consentItem}>
+                • No se formula diagnóstico ni se ordenan exámenes.
+              </Text>
+              <Text style={styles.consentItem}>
+                • No se prescribe medicación.
+              </Text>
+              <Text style={styles.consentItem}>
+                • Los datos personales serán tratados según la Ley 1581 de
+                2012.
+              </Text>
+              <Text style={styles.consentItem}>
+                • En caso de urgencia acudiré a un servicio médico.
+              </Text>
+            </View>
+
+            <View style={styles.consentButtonsRow}>
+              <TouchableOpacity
+                style={styles.consentCancel}
+                onPress={() => setConsentVisible(false)}
+              >
+                <Text style={styles.consentCancelText}>Cancelar</Text>
+              </TouchableOpacity>
 
               <TouchableOpacity
-                style={styles.growthCheckButton}
-                onPress={handleToggleGrowth}
+                style={styles.consentAccept}
+                onPress={handleAcceptConsent}
               >
-                <Ionicons
-                  name={
-                    growthDone ? "checkmark-circle" : "ellipse-outline"
-                  }
-                  size={26}
-                  color={growthDone ? "#16a34a" : "#4B5563"}
-                />
+                <Text style={styles.consentAcceptText}>
+                  Acepto y deseo continuar
+                </Text>
               </TouchableOpacity>
             </View>
-          )}
-        </View>
-
-        {/* Resumen de vacunas */}
-        <View style={styles.vaccinesCard}>
-          <View style={styles.vaccinesHeaderRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.vaccinesTitle}>Vacunas</Text>
-              <Text style={styles.vaccinesSubtitle}>
-                {childAgeMonths !== null
-                  ? `Edad aproximada: ${childAgeMonths} meses`
-                  : "Completa la fecha de nacimiento en el perfil para ver el esquema."}
-              </Text>
-            </View>
-
-            <TouchableOpacity onPress={() => router.push("/vacunas")}>
-              <View style={styles.vaccinesLink}>
-                <Text style={styles.vaccinesLinkText}>Ver detalle</Text>
-                <Ionicons
-                  name="chevron-forward"
-                  size={16}
-                  color="#111827"
-                />
-              </View>
-            </TouchableOpacity>
-          </View>
-
-          <View style={styles.vaccinesSummaryRow}>
-            <View style={styles.vaccinesSummaryItem}>
-              <Text style={styles.vaccinesSummaryNumber}>
-                {pendingCount}
-              </Text>
-              <Text style={styles.vaccinesSummaryLabel}>
-                dosis pendientes
-              </Text>
-            </View>
-            <View style={[styles.vaccinesSummaryItem, { flex: 2 }]}>
-              <Text style={styles.vaccinesNextLabel}>Próxima vacuna</Text>
-              <Text style={styles.vaccinesNextValue}>
-                {nextDoseDescription}
-              </Text>
-            </View>
           </View>
         </View>
+      </TouchableWithoutFeedback>
+    </Modal>
 
-        {/* Botón Haz tu pregunta */}
-        <TouchableOpacity style={styles.mainButton} onPress={openQuestionModal}>
-          <Text style={styles.mainButtonText}>Haz tu pregunta</Text>
-        </TouchableOpacity>
-      </ScrollView>
+    {/* MODAL PARA HACER LA PREGUNTA */}
+    <Modal
+      visible={questionVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={closeQuestionModal}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <View style={styles.bottomSheet}>
+              <View style={styles.sheetHandle} />
 
-      {/* MODAL DE CONSENTIMIENTO */}
-      <Modal
-        visible={consentVisible}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setConsentVisible(false)}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalOverlay}>
-            <View style={styles.consentBox}>
-              <Text style={styles.consentTitle}>Consentimiento</Text>
-              <Text style={styles.consentIntro}>
-                Antes de continuar, por favor lee y acepta estas condiciones:
+              <Text style={styles.sheetTitle}>Haz tu pregunta</Text>
+              <Text style={styles.sheetSubtitle}>
+                Describe brevemente qué te preocupa sobre tu peque.
               </Text>
 
-              <View style={styles.consentList}>
-                <Text style={styles.consentItem}>
-                  • Acepto que la información recibida es orientación general.
-                </Text>
-                <Text style={styles.consentItem}>
-                  • No se formula diagnóstico ni se ordenan exámenes.
-                </Text>
-                <Text style={styles.consentItem}>
-                  • No se prescribe medicación.
-                </Text>
-                <Text style={styles.consentItem}>
-                  • Los datos personales serán tratados según la Ley 1581 de
-                  2012.
-                </Text>
-                <Text style={styles.consentItem}>
-                  • En caso de urgencia acudiré a un servicio médico.
-                </Text>
-              </View>
+              <Text style={styles.label}>Asunto</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ej. Fiebre alta en la noche"
+                placeholderTextColor="#9CA3AF"
+                value={subject}
+                onChangeText={setSubject}
+                returnKeyType="next"
+              />
 
-              <View style={styles.consentButtonsRow}>
+              <Text style={styles.label}>Mensaje</Text>
+              <TextInput
+                style={[styles.input, styles.messageInput]}
+                placeholder="Cuéntanos síntomas, tiempo de evolución, edad de tu hijo, etc."
+                placeholderTextColor="#9CA3AF"
+                value={message}
+                onChangeText={setMessage}
+                multiline
+                textAlignVertical="top"
+              />
+
+              <View style={styles.sheetButtonsRow}>
                 <TouchableOpacity
-                  style={styles.consentCancel}
-                  onPress={() => setConsentVisible(false)}
+                  style={styles.cancelButton}
+                  onPress={closeQuestionModal}
+                  disabled={sending}
                 >
-                  <Text style={styles.consentCancelText}>Cancelar</Text>
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={styles.consentAccept}
-                  onPress={handleAcceptConsent}
+                  style={[styles.sendButton, sending && { opacity: 0.7 }]}
+                  onPress={handleSendQuestion}
+                  disabled={sending}
                 >
-                  <Text style={styles.consentAcceptText}>
-                    Acepto y deseo continuar
+                  <Text style={styles.sendButtonText}>
+                    {sending ? "Enviando..." : "Enviar pregunta"}
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* MODAL PARA HACER LA PREGUNTA */}
-      <Modal
-        visible={questionVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeQuestionModal}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-            >
-              <View style={styles.bottomSheet}>
-                <View style={styles.sheetHandle} />
-
-                <Text style={styles.sheetTitle}>Haz tu pregunta</Text>
-                <Text style={styles.sheetSubtitle}>
-                  Describe brevemente qué te preocupa sobre tu peque.
-                </Text>
-
-                <Text style={styles.label}>Asunto</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. Fiebre alta en la noche"
-                  placeholderTextColor="#9CA3AF"
-                  value={subject}
-                  onChangeText={setSubject}
-                  returnKeyType="next"
-                />
-
-                <Text style={styles.label}>Mensaje</Text>
-                <TextInput
-                  style={[styles.input, styles.messageInput]}
-                  placeholder="Cuéntanos síntomas, tiempo de evolución, edad de tu hijo, etc."
-                  placeholderTextColor="#9CA3AF"
-                  value={message}
-                  onChangeText={setMessage}
-                  multiline
-                  textAlignVertical="top"
-                />
-
-                <View style={styles.sheetButtonsRow}>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={closeQuestionModal}
-                    disabled={sending}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancelar</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.sendButton, sending && { opacity: 0.7 }]}
-                    onPress={handleSendQuestion}
-                    disabled={sending}
-                  >
-                    <Text style={styles.sendButtonText}>
-                      {sending ? "Enviando..." : "Enviar pregunta"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </KeyboardAvoidingView>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* MODAL NUEVO ARTÍCULO (solo doctor) */}
-      <Modal
-        visible={articleModalVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeArticleModal}
-      >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-          <View style={styles.modalOverlay}>
-            <KeyboardAvoidingView
-              behavior={Platform.OS === "ios" ? "padding" : undefined}
-            >
-              <View style={styles.bottomSheet}>
-                <View style={styles.sheetHandle} />
-                <Text style={styles.sheetTitle}>Nuevo artículo</Text>
-                <Text style={styles.sheetSubtitle}>
-                  Comparte información útil con las familias.
-                </Text>
-
-                <TouchableOpacity
-                  style={styles.imagePickerButton}
-                  onPress={pickArticleImage}
-                  disabled={uploadingArticleImage}
-                >
-                  {newArticleImage ? (
-                    <Image
-                      source={{ uri: newArticleImage }}
-                      style={styles.articlePreviewImage}
-                      resizeMode="cover"
-                    />
-                  ) : (
-                    <>
-                      {uploadingArticleImage ? (
-                        <ActivityIndicator size="small" color="#6B7280" />
-                      ) : (
-                        <Ionicons
-                          name="image-outline"
-                          size={22}
-                          color="#6B7280"
-                        />
-                      )}
-                      <Text style={styles.imagePickerText}>
-                        Añadir imagen
-                      </Text>
-                    </>
-                  )}
-                </TouchableOpacity>
-
-                <Text style={styles.label}>Título</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Ej. Cómo manejar la fiebre en casa"
-                  placeholderTextColor="#9CA3AF"
-                  value={newArticleTitle}
-                  onChangeText={setNewArticleTitle}
-                />
-
-                <Text style={styles.label}>Texto</Text>
-                <TextInput
-                  style={[styles.input, styles.messageInput]}
-                  placeholder="Escribe aquí el contenido del artículo."
-                  placeholderTextColor="#9CA3AF"
-                  value={newArticleText}
-                  onChangeText={setNewArticleText}
-                  multiline
-                  textAlignVertical="top"
-                />
-
-                <View style={styles.sheetButtonsRow}>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={closeArticleModal}
-                    disabled={savingArticle}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancelar</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.sendButton, savingArticle && { opacity: 0.7 }]}
-                    onPress={handleSaveArticle}
-                    disabled={savingArticle}
-                  >
-                    <Text style={styles.sendButtonText}>
-                      {savingArticle ? "Guardando..." : "Publicar"}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </KeyboardAvoidingView>
-          </View>
-        </TouchableWithoutFeedback>
-      </Modal>
-
-      {/* MODAL DETALLE ARTÍCULO */}
-      <Modal
-        visible={articleDetailVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={closeArticleDetail}
-      >
-        <View style={styles.detailOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-            style={{ flex: 1 }}
-          >
-            <Animated.View
-              style={[
-                styles.detailSheet,
-                { transform: [{ translateY }] },
-              ]}
-              {...panResponder.panHandlers}
-            >
-              <View style={styles.sheetHandle} />
-
-              <TouchableOpacity
-                style={styles.detailCloseButton}
-                onPress={closeArticleDetail}
-              >
-                <Ionicons name="close" size={20} color="#4B5563" />
-              </TouchableOpacity>
-
-              <ScrollView
-                style={{ flex: 1 }}
-                contentContainerStyle={styles.detailContent}
-                showsVerticalScrollIndicator={false}
-                scrollEventThrottle={16}
-                onScroll={(event) => {
-                  scrollOffsetY.current =
-                    event.nativeEvent.contentOffset.y;
-                }}
-              >
-                {selectedArticle && (
-                  <>
-                    {selectedArticle.imageUrl && (
-                      <Image
-                        source={{ uri: selectedArticle.imageUrl }}
-                        style={styles.detailImage}
-                        resizeMode="cover"
-                      />
-                    )}
-
-                    <Text style={styles.detailTitle}>
-                      {selectedArticle.title}
-                    </Text>
-                    <Text style={styles.detailDoctor}>
-                      Publicado por{" "}
-                      {getDoctorLabel(selectedArticle.doctorName)}
-                    </Text>
-                    <Text style={styles.detailText}>
-                      {selectedArticle.text}
-                    </Text>
-                  </>
-                )}
-              </ScrollView>
-            </Animated.View>
           </KeyboardAvoidingView>
         </View>
-      </Modal>
-    </View>
-  );
+      </TouchableWithoutFeedback>
+    </Modal>
+
+    {/* MODAL NUEVO ARTÍCULO (solo doctor) */}
+    <Modal
+      visible={articleModalVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={closeArticleModal}
+    >
+      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+        <View style={styles.modalOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+          >
+            <View style={styles.bottomSheet}>
+              <View style={styles.sheetHandle} />
+              <Text style={styles.sheetTitle}>Nuevo artículo</Text>
+              <Text style={styles.sheetSubtitle}>
+                Comparte información útil con las familias.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.imagePickerButton}
+                onPress={pickArticleImage}
+                disabled={uploadingArticleImage}
+              >
+                {newArticleImage ? (
+                  <Image
+                    source={{ uri: newArticleImage }}
+                    style={styles.articlePreviewImage}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <>
+                    {uploadingArticleImage ? (
+                      <ActivityIndicator size="small" color="#6B7280" />
+                    ) : (
+                      <Ionicons
+                        name="image-outline"
+                        size={22}
+                        color="#6B7280"
+                      />
+                    )}
+                    <Text style={styles.imagePickerText}>Añadir imagen</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+
+              <Text style={styles.label}>Título</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Ej. Cómo manejar la fiebre en casa"
+                placeholderTextColor="#9CA3AF"
+                value={newArticleTitle}
+                onChangeText={setNewArticleTitle}
+              />
+
+              <Text style={styles.label}>Texto</Text>
+              <TextInput
+                style={[styles.input, styles.messageInput]}
+                placeholder="Escribe aquí el contenido del artículo."
+                placeholderTextColor="#9CA3AF"
+                value={newArticleText}
+                onChangeText={setNewArticleText}
+                multiline
+                textAlignVertical="top"
+              />
+
+              <View style={styles.sheetButtonsRow}>
+                <TouchableOpacity
+                  style={styles.cancelButton}
+                  onPress={closeArticleModal}
+                  disabled={savingArticle}
+                >
+                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.sendButton, savingArticle && { opacity: 0.7 }]}
+                  onPress={handleSaveArticle}
+                  disabled={savingArticle}
+                >
+                  <Text style={styles.sendButtonText}>
+                    {savingArticle ? "Guardando..." : "Publicar"}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+
+    {/* MODAL DETALLE ARTÍCULO */}
+    <Modal
+      visible={articleDetailVisible}
+      transparent
+      animationType="slide"
+      onRequestClose={closeArticleDetail}
+    >
+      <View style={styles.detailOverlay}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : undefined}
+          style={{ flex: 1 }}
+        >
+          <Animated.View
+            style={[
+              styles.detailSheet,
+              { transform: [{ translateY }] },
+            ]}
+            {...panResponder.panHandlers}
+          >
+            <View style={styles.sheetHandle} />
+
+            <TouchableOpacity
+              style={styles.detailCloseButton}
+              onPress={closeArticleDetail}
+            >
+              <Ionicons name="close" size={20} color="#4B5563" />
+            </TouchableOpacity>
+
+            <ScrollView
+              style={{ flex: 1 }}
+              contentContainerStyle={styles.detailContent}
+              showsVerticalScrollIndicator={false}
+              scrollEventThrottle={16}
+              onScroll={(event) => {
+                scrollOffsetY.current = event.nativeEvent.contentOffset.y;
+              }}
+            >
+              {selectedArticle && (
+                <>
+                  {selectedArticle.imageUrl && (
+                    <Image
+                      source={{ uri: selectedArticle.imageUrl }}
+                      style={styles.detailImage}
+                      resizeMode="cover"
+                    />
+                  )}
+
+                  <Text style={styles.detailTitle}>
+                    {selectedArticle.title}
+                  </Text>
+                  <Text style={styles.detailDoctor}>
+                    Publicado por{" "}
+                    {getDoctorLabel(selectedArticle.doctorName)}
+                  </Text>
+                  <Text style={styles.detailText}>
+                    {selectedArticle.text}
+                  </Text>
+                </>
+              )}
+            </ScrollView>
+          </Animated.View>
+        </KeyboardAvoidingView>
+      </View>
+    </Modal>
+  </View>
+);
+
 }
 
 const styles = StyleSheet.create({
@@ -1731,5 +1813,90 @@ const styles = StyleSheet.create({
   detailText: {
     fontSize: 14,
     color: "#111827",
+  },
+    // FAQ IA
+  faqCard: {
+    marginTop: 20,
+    borderRadius: 16,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  faqHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 8,
+    gap: 8,
+  },
+  faqTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  faqSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  faqLoadingBox: {
+    marginTop: 8,
+    borderRadius: 12,
+    backgroundColor: "#F3F4F6",
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  faqLoadingText: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  faqErrorText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#B91C1C",
+  },
+  faqEmptyText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  faqList: {
+    marginTop: 4,
+    gap: 10,
+  },
+  faqItem: {
+    backgroundColor: "#FDF8F5",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  faqQuestionRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 4,
+  },
+  faqBullet: {
+    width: 6,
+    height: 6,
+    borderRadius: 999,
+    backgroundColor: "#75e2da",
+    marginRight: 6,
+  },
+  faqQuestionText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+    flex: 1,
+  },
+  faqAnswerText: {
+    fontSize: 13,
+    color: "#4B5563",
+    marginTop: 2,
   },
 });

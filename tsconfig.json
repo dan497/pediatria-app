@@ -1,6 +1,9 @@
 {
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
+    "jsx": "react",
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM"],
     "strict": true,
     "paths": {
       "@/*": [
