@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -115,6 +115,9 @@ export default function RegisterScreen() {
   const cityLabel = !city ? "Selecciona tu ciudad" : city;
 
   const languageLabel = !language ? "Selecciona un idioma" : language;
+  const [cities, setCities] = useState<string[]>([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
+  const [citiesError, setCitiesError] = useState<string | null>(null);
 
   // 🔍 Validar campos por paso
   const validateStep = () => {
@@ -243,6 +246,39 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
+useEffect(() => {
+  const fetchCities = async () => {
+    try {
+      setCitiesLoading(true);
+      setCitiesError(null);
+
+      const res = await fetch("https://api-colombia.com/api/v1/City");
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        console.log("Error HTTP ciudades:", res.status, txt);
+        throw new Error(`Error HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      console.log("Ciudades API:", data?.length); // 👈 para ver si llega algo
+
+      const names: string[] = data
+        .map((c: any) => c.name as string)
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b, "es"));
+
+      setCities(names);
+    } catch (e: any) {
+      console.log("Error cargando ciudades:", e);
+      setCitiesError("No se pudieron cargar las ciudades. Intenta de nuevo.");
+    } finally {
+      setCitiesLoading(false);
+    }
+  };
+
+  fetchCities();
+}, []);
+
 
   const handleNext = () => {
     if (!validateStep()) return;
@@ -622,37 +658,55 @@ export default function RegisterScreen() {
               </Text>
             </TouchableOpacity>
 
-            {showCityPicker && (
-              <View style={styles.pickerContainer}>
-                <Picker
-                  selectedValue={city}
-                  onValueChange={(value) => setCity(value)}
-                  style={styles.pickerWheel}
-                  itemStyle={styles.pickerItem}
-                >
-                  <Picker.Item
-                    label="Selecciona tu ciudad"
-                    value=""
-                    color="#6B7280"
-                  />
-                  {COLOMBIAN_CITIES.map((c) => (
-                    <Picker.Item
-                      key={c}
-                      label={c}
-                      value={c}
-                      color="#111827"
-                    />
-                  ))}
-                </Picker>
+                {showCityPicker && (
+                  <View style={styles.pickerContainer}>
+                    {/* DEBUG opcional para ver el tamaño del array */}
+                    {/* <Text style={{ paddingHorizontal: 16 }}>Ciudades cargadas: {cities.length}</Text> */}
 
-                <TouchableOpacity
-                  style={styles.pickerDoneButton}
-                  onPress={() => setShowCityPicker(false)}
-                >
-                  <Text style={styles.pickerDoneText}>Listo</Text>
-                </TouchableOpacity>
-              </View>
-            )}
+                    <Picker
+                      key={citiesLoading ? "cities-loading" : `cities-${cities.length}`} // 👈 fuerza remount
+                      selectedValue={city}
+                      onValueChange={(value) => setCity(value as string)}
+                      style={styles.pickerWheel}
+                      itemStyle={styles.pickerItem}
+                    >
+                      {/* Placeholder siempre */}
+                      <Picker.Item
+                        label={
+                          citiesLoading
+                            ? "Cargando ciudades..."
+                            : citiesError
+                            ? "Error al cargar ciudades"
+                            : "Selecciona tu ciudad"
+                        }
+                        value=""
+                        color={citiesError ? "#B91C1C" : "#6B7280"}
+                      />
+
+                      {/* Si ya cargaron y no hay error, pintar la lista */}
+                      {!citiesLoading &&
+                        !citiesError &&
+                        cities.map((c, idx) => (
+                          <Picker.Item
+                            key={`${c}-${idx}`} // 👈 evita problemas por nombres repetidos
+                            label={c}
+                            value={c}
+                            color="#111827"
+                          />
+                        ))}
+                    </Picker>
+
+                    <TouchableOpacity
+                      style={styles.pickerDoneButton}
+                      onPress={() => setShowCityPicker(false)}
+                    >
+                      <Text style={styles.pickerDoneText}>Listo</Text>
+                    </TouchableOpacity>
+                  </View>
+                )}
+
+
+
 
             {/* Idioma preferido */}
             <Text style={styles.label}>Idioma preferido</Text>

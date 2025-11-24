@@ -15,6 +15,7 @@ import {
   TouchableWithoutFeedback,
   Animated,
   PanResponder,
+    Image, // 👈 agrega esto
 } from "react-native";
 import { auth, db } from "../lib/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
@@ -148,6 +149,12 @@ export default function ProfileScreen() {
       },
     })
   ).current;
+const getAvatarUrl = (name?: string, fallback: string = "Usuario Pediatría") => {
+  const clean = (name && name.trim()) || fallback;
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    clean
+  )}&background=random&color=ffffff&size=96&bold=true&rounded=true`;
+};
 
   // -------- abrir/cerrar modales ----------
   const openParentModal = () => {
@@ -328,7 +335,12 @@ export default function ProfileScreen() {
       setSavingChild(false);
     }
   };
-
+    const getFaqAvatarUrl = (text: string) => {
+      const clean = text?.trim() || "IA Pediatría";
+      return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+        clean
+      )}&background=random&color=ffffff&size=80&bold=true&rounded=true`;
+    };
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -362,7 +374,15 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <View style={styles.avatarCircle}>
-              <Text style={styles.avatarInitial}>{parentInitial}</Text>
+              <Image
+                source={{
+                  uri: getAvatarUrl(
+                    parentInfo?.name || parentInfo?.email || user.email || undefined,
+                    "Padre Madre"
+                  ),
+                }}
+                style={styles.avatarImage}
+              />
             </View>
             <View style={{ flex: 1 }}>
               <Text style={styles.cardTitle}>
@@ -416,8 +436,14 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <View style={[styles.avatarCircle, { backgroundColor: "#E5E7EB" }]}>
-              <Text style={styles.avatarInitial}>{childInitial}</Text>
+              <Image
+                source={{
+                  uri: getAvatarUrl(childInfo?.name || "Tu peque", "Tu peque"),
+                }}
+                style={styles.avatarImage}
+              />
             </View>
+
             <View style={{ flex: 1 }}>
               <Text style={styles.cardTitle}>
                 {childInfo?.name || "Tu peque"}
@@ -720,6 +746,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#FDF8F5",
+  },
+    avatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 999,
   },
   loadingContainer: {
     flex: 1,

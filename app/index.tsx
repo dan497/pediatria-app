@@ -773,6 +773,8 @@ useEffect(() => {
       return;
     }
 
+
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.7,
@@ -840,7 +842,12 @@ useEffect(() => {
     setArticleDetailVisible(true);
   };
 
-
+const getFaqAvatarUrl = (text: string) => {
+  const clean = text?.trim() || "IA Pediatría";
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    clean
+  )}&background=random&color=ffffff&size=80&bold=true&rounded=true`;
+};
 
 return (
   <View style={styles.container}>
@@ -1031,15 +1038,20 @@ return (
           </Text>
         ) : (
           <View style={styles.faqList}>
-            {faqs.slice(0, 3).map((faq) => (
-              <View key={faq.id} style={styles.faqItem}>
-                <View style={styles.faqQuestionRow}>
-                  <View style={styles.faqBullet} />
-                  <Text style={styles.faqQuestionText}>{faq.question}</Text>
+              {faqs.slice(0, 3).map((faq) => (
+                <View key={faq.id} style={styles.faqItem}>
+                  <View style={styles.faqQuestionRow}>
+                    <Image
+                      source={{ uri: getFaqAvatarUrl(faq.question) }}
+                      style={styles.faqIcon}
+                    />
+                    <Text style={styles.faqQuestionText}>{faq.question}</Text>
+                  </View>
+                  <Text style={styles.faqAnswerText}>{faq.answer}</Text>
                 </View>
-                <Text style={styles.faqAnswerText}>{faq.answer}</Text>
-              </View>
-            ))}
+              ))}
+
+
           </View>
         )}
       </View>
@@ -1329,7 +1341,6 @@ return (
     </Modal>
   </View>
 );
-
 }
 
 const styles = StyleSheet.create({
@@ -1365,6 +1376,13 @@ const styles = StyleSheet.create({
   articlesRow: {
     paddingVertical: 6,
     paddingRight: 8,
+  },
+    faqIcon: {
+    width: 24,
+    height: 24,
+    borderRadius: 999,
+    marginRight: 8,
+    backgroundColor: "#E5E7EB",
   },
   newArticleCard: {
     width: 180,
