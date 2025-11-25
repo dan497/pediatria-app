@@ -39,6 +39,7 @@ import {
   View,
 } from "react-native";
 import { auth, db, storage } from "../lib/firebase";
+import * as Notifications from "expo-notifications";
 
 // ------------------ Tipos ---------------------------
 type Article = {
@@ -48,6 +49,7 @@ type Article = {
   imageUrl?: string;
   doctorName?: string;
 };
+
 
 type QuestionSummary = {
   id: string;
@@ -413,6 +415,13 @@ function getAgeInMonths(birthDateStr?: string): number | null {
 }
 
 // -------------------------------------------------------------------
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
 
 export default function HomeScreen() {
   const [user, setUser] = useState<User | null>(null);
@@ -424,6 +433,9 @@ export default function HomeScreen() {
   const [questionsBalance, setQuestionsBalance] = useState<number | null>(
     null
   );
+
+    // Para comparar artículos anteriores vs nuevos
+  const articlesRef = useRef<Article[]>([]);
 
   // vacunas resumen
   const [childAgeMonths, setChildAgeMonths] = useState<number | null>(null);
@@ -480,6 +492,27 @@ export default function HomeScreen() {
   // animación / gesto para sheet del artículo
   const translateY = useRef(new Animated.Value(0)).current;
   const scrollOffsetY = useRef(0);
+
+    useEffect(() => {
+    (async () => {
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        let finalStatus = status;
+
+        if (status !== "granted") {
+          const req = await Notifications.requestPermissionsAsync();
+          finalStatus = req.status;
+        }
+
+        if (finalStatus !== "granted") {
+          console.log("Permiso de notificaciones no concedido");
+        }
+      } catch (e) {
+        console.log("Error solicitando permiso de notificaciones:", e);
+      }
+    })();
+  }, []);
+
 
   // ---------- FAQs IA ----------
   useEffect(() => {
@@ -614,12 +647,15 @@ export default function HomeScreen() {
   }, []);
 
   // ---------- artículos ----------
+  // ---------- artículos ----------
   useEffect(() => {
     const q = query(collection(db, "articles"), orderBy("createdAt", "desc"));
 
+    let firstLoad = true; // para no notificar todo en la primera carga
+
     const unsub = onSnapshot(
       q,
-      (snap) => {
+      async (snap) => {
         const list: Article[] = [];
         snap.forEach((docSnap) => {
           const data = docSnap.data() as any;
@@ -631,6 +667,36 @@ export default function HomeScreen() {
             doctorName: data.doctorName,
           });
         });
+
+        // Detectar artículos nuevos solo después de la primera carga
+        if (!firstLoad) {
+          const prev = articlesRef.current;
+          const nuevos = list.filter(
+            (a) => !prev.some((p) => p.id === a.id)
+          );
+
+          // Notificar solo a padres (no a doctores)
+          if (nuevos.length > 0 && role !== "doctor") {
+            for (const art of nuevos) {
+              try {
+                await Notifications.scheduleNotificationAsync({
+                  content: {
+                    title: "Nuevo artículo disponible",
+                    body: art.title,
+                    data: { articleId: art.id },
+                  },
+                  trigger: null, // inmediata
+                });
+              } catch (e) {
+                console.log("Error programando notificación de artículo:", e);
+              }
+            }
+          }
+        } else {
+          firstLoad = false;
+        }
+
+        articlesRef.current = list;
         setArticles(list);
         setArticlesLoading(false);
       },
@@ -641,7 +707,8 @@ export default function HomeScreen() {
     );
 
     return () => unsub();
-  }, []);
+  }, [role]);
+
 
   // ---------- preguntas sin responder (solo doctor) ----------
   useEffect(() => {
