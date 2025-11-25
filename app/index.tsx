@@ -1,47 +1,63 @@
 // app/index.tsx
-import { useEffect, useState, useRef } from "react";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  ActivityIndicator,
-  Modal,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  TouchableWithoutFeedback,
-  Keyboard,
-  Image,
-  Animated,
-  PanResponder,
-} from "react-native";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { LinearGradient } from "expo-linear-gradient";
 import { router } from "expo-router";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { auth, db, storage } from "../lib/firebase";
 import {
-  doc,
-  getDoc,
   addDoc,
   collection,
-  serverTimestamp,
+  doc,
+  getDoc,
+  increment,
   onSnapshot,
-  query,
   orderBy,
+  query,
+  serverTimestamp,
+  Timestamp,
   updateDoc,
 } from "firebase/firestore";
-import * as ImagePicker from "expo-image-picker";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Ionicons } from "@expo/vector-icons";
-import { LinearGradient } from "expo-linear-gradient";
+import Markdown from "react-native-markdown-display";
 
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  PanResponder,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
+} from "react-native";
+import { auth, db, storage } from "../lib/firebase";
+
+// ------------------ Tipos ---------------------------
 type Article = {
   id: string;
   title: string;
   text: string;
   imageUrl?: string;
   doctorName?: string;
+};
+
+type QuestionSummary = {
+  id: string;
+  userId: string;
+  subject: string;
+  message: string;
+  status?: string;
+  createdAt?: Timestamp;
+  lastMessageText?: string;
+  lastMessageAt?: Timestamp;
 };
 
 // --- Crecimiento y desarrollo --------------------------------------
@@ -182,7 +198,7 @@ const GROWTH_VISITS: GrowthVisitDef[] = [
   },
 ];
 
-// --- Vacunas: mismos IDs que en Vacunas.tsx -------------------------
+// --- Vacunas --------------------------------------------------------
 type VaccineDose = {
   id: string;
   vaccine: string;
@@ -201,7 +217,6 @@ type FAQ = {
 const VACCINE_DOSES: VaccineDose[] = [
   // BCG
   { id: "bcg_birth", vaccine: "BCG", ageLabel: "Nacimiento", ageMonths: 0 },
-
   // Hepatitis B
   {
     id: "hepb_birth",
@@ -209,7 +224,6 @@ const VACCINE_DOSES: VaccineDose[] = [
     ageLabel: "Nacimiento",
     ageMonths: 0,
   },
-
   // Rotavirus
   {
     id: "rota_2m",
@@ -223,8 +237,7 @@ const VACCINE_DOSES: VaccineDose[] = [
     ageLabel: "4 meses",
     ageMonths: 4,
   },
-
-  // Pentavalente (4 dosis: 2m, 4m, 6m, 18m)
+  // Pentavalente
   {
     id: "penta_2m",
     vaccine: "Pentavalente",
@@ -249,8 +262,7 @@ const VACCINE_DOSES: VaccineDose[] = [
     ageLabel: "18 meses",
     ageMonths: 18,
   },
-
-  // IPV (5 dosis: 2m, 4m, 6m, 18m, 5 años)
+  // IPV
   {
     id: "ipv_2m",
     vaccine: "IPV",
@@ -281,8 +293,7 @@ const VACCINE_DOSES: VaccineDose[] = [
     ageLabel: "5 años",
     ageMonths: 60,
   },
-
-  // Neumococo PCV13
+  // Neumococo
   {
     id: "pcv13_2m",
     vaccine: "Neumococo PCV13",
@@ -301,8 +312,7 @@ const VACCINE_DOSES: VaccineDose[] = [
     ageLabel: "12 meses",
     ageMonths: 12,
   },
-
-  // Influenza (3 dosis: 6m, 7m, 12m)
+  // Influenza
   {
     id: "flu_6m",
     vaccine: "Influenza (trivalente)",
@@ -321,8 +331,7 @@ const VACCINE_DOSES: VaccineDose[] = [
     ageLabel: "12 meses",
     ageMonths: 12,
   },
-
-  // Varicela (12m, 5 años)
+  // Varicela
   {
     id: "varicela_12m",
     vaccine: "Varicela",
@@ -335,16 +344,14 @@ const VACCINE_DOSES: VaccineDose[] = [
     ageLabel: "5 años",
     ageMonths: 60,
   },
-
-  // Hepatitis A (solo 12 meses)
+  // Hepatitis A
   {
     id: "hepa_12m",
     vaccine: "Hepatitis A",
     ageLabel: "12 meses",
     ageMonths: 12,
   },
-
-  // SRP (12m, 18m)
+  // SRP
   {
     id: "srp_12m",
     vaccine: "SRP",
@@ -357,24 +364,21 @@ const VACCINE_DOSES: VaccineDose[] = [
     ageLabel: "18 meses",
     ageMonths: 18,
   },
-
-  // Fiebre amarilla (18m)
+  // Fiebre amarilla
   {
     id: "yellowfever_18m",
     vaccine: "Fiebre amarilla",
     ageLabel: "18 meses",
     ageMonths: 18,
   },
-
-  // DPT (solo 5 años)
+  // DPT
   {
     id: "dpt_5y",
     vaccine: "DPT",
     ageLabel: "5 años",
     ageMonths: 60,
   },
-
-  // SARS-CoV-2 (a partir de 6 meses)
+  // COVID
   {
     id: "covid_6m",
     vaccine: "SARS-CoV-2",
@@ -416,6 +420,11 @@ export default function HomeScreen() {
   const [role, setRole] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // saldo de preguntas
+  const [questionsBalance, setQuestionsBalance] = useState<number | null>(
+    null
+  );
+
   // vacunas resumen
   const [childAgeMonths, setChildAgeMonths] = useState<number | null>(null);
   const [vaccineRecords, setVaccineRecords] = useState<VaccineRecords>({});
@@ -429,7 +438,9 @@ export default function HomeScreen() {
 
   // detalle artículo
   const [articleDetailVisible, setArticleDetailVisible] = useState(false);
-  const [selectedArticle, setSelectedArticle] = useState<Article | null>(null);
+  const [selectedArticle, setSelectedArticle] = useState<Article | null>(
+    null
+  );
 
   const isDoctor = role === "doctor";
 
@@ -447,61 +458,70 @@ export default function HomeScreen() {
   const [articleModalVisible, setArticleModalVisible] = useState(false);
   const [newArticleTitle, setNewArticleTitle] = useState("");
   const [newArticleText, setNewArticleText] = useState("");
-  const [newArticleImage, setNewArticleImage] = useState<string | null>(null);
+  const [newArticleImage, setNewArticleImage] = useState<string | null>(
+    null
+  );
   const [savingArticle, setSavingArticle] = useState(false);
-  const [uploadingArticleImage, setUploadingArticleImage] = useState(false);
+  const [uploadingArticleImage, setUploadingArticleImage] =
+    useState(false);
 
-  // esto es lo de la ia y las preguntas frecuentes sjakasjska
-
+  // FAQs IA
   const [faqs, setFaqs] = useState<FAQ[]>([]);
   const [faqsLoading, setFaqsLoading] = useState(false);
   const [faqsError, setFaqsError] = useState<string | null>(null);
+
+  // preguntas sin responder (doctor)
+  const [doctorQuestions, setDoctorQuestions] = useState<QuestionSummary[]>(
+    []
+  );
+  const [doctorQuestionsLoading, setDoctorQuestionsLoading] =
+    useState<boolean>(true);
+
   // animación / gesto para sheet del artículo
   const translateY = useRef(new Animated.Value(0)).current;
   const scrollOffsetY = useRef(0);
 
-// 👇 añade este useEffect DENTRO del componente HomeScreen
-useEffect(() => {
-  const loadFaqsFromAI = async () => {
-    try {
-      setFaqsLoading(true);
-      setFaqsError(null);
+  // ---------- FAQs IA ----------
+  useEffect(() => {
+    const loadFaqsFromAI = async () => {
+      try {
+        setFaqsLoading(true);
+        setFaqsError(null);
 
-      const ageParam =
-        childAgeMonths != null ? `?ageMonths=${childAgeMonths}` : "";
-      const res = await fetch(
-        "https://getfaqs-kpk5ufs2qq-uc.a.run.app" + ageParam
-      );
-
-      if (!res.ok) {
-        // si quieres ver el mensaje real:
-        let details = "";
-        try {
-          const txt = await res.text();
-          details = txt;
-        } catch {}
-        throw new Error(
-          `Error al cargar FAQs (status ${res.status}): ${details}`
+        const ageParam =
+          childAgeMonths != null ? `?ageMonths=${childAgeMonths}` : "";
+        const res = await fetch(
+          "https://getfaqs-kpk5ufs2qq-uc.a.run.app" + ageParam
         );
+
+        if (!res.ok) {
+          let details = "";
+          try {
+            const txt = await res.text();
+            details = txt;
+          } catch {}
+          throw new Error(
+            `Error al cargar FAQs (status ${res.status}): ${details}`
+          );
+        }
+
+        const data: FAQ[] = await res.json();
+        setFaqs(data);
+      } catch (e: any) {
+        console.log("Error cargando FAQs IA:", e);
+        setFaqsError(
+          e?.message || "No se pudieron cargar las preguntas frecuentes."
+        );
+      } finally {
+        setFaqsLoading(false);
       }
+    };
 
-      const data: FAQ[] = await res.json();
-      setFaqs(data);
-    } catch (e: any) {
-      console.log("Error cargando FAQs IA:", e);
-      setFaqsError(
-        e?.message || "No se pudieron cargar las preguntas frecuentes."
-      );
-    } finally {
-      setFaqsLoading(false);
-    }
-  };
+    // Solo tiene sentido para padres, no para doctores
+    if (isDoctor) return;
 
-  // opcional: no llames si no hay edad
-  // if (childAgeMonths == null) return;
-
-  loadFaqsFromAI();
-}, [childAgeMonths]); // o [] si quieres que se ejecute solo una vez
+    loadFaqsFromAI();
+  }, [childAgeMonths, isDoctor]);
 
   const closeArticleDetail = () => {
     Animated.spring(translateY, {
@@ -541,6 +561,7 @@ useEffect(() => {
     })
   ).current;
 
+  // ---------- auth + usuario ----------
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (!firebaseUser) {
@@ -562,7 +583,7 @@ useEffect(() => {
           setParentName(finalName || "");
           setRole(data?.role ?? null);
 
-          // vacunas y crecimiento: leer fecha de nacimiento y registros
+          // vacunas y crecimiento
           const birthDate: string | undefined = data?.childInfo?.birthDate;
           const ageM = getAgeInMonths(birthDate);
           setChildAgeMonths(ageM);
@@ -572,6 +593,13 @@ useEffect(() => {
 
           const growthRecs: GrowthRecords = data?.growthRecords || {};
           setGrowthRecords(growthRecs);
+
+          // saldo de preguntas
+          if (typeof data?.questions === "number") {
+            setQuestionsBalance(data.questions);
+          } else {
+            setQuestionsBalance(null);
+          }
         } else {
           setParentName(firebaseUser.displayName || firebaseUser.email || "");
         }
@@ -585,7 +613,7 @@ useEffect(() => {
     return () => unsub();
   }, []);
 
-  // cargar artículos
+  // ---------- artículos ----------
   useEffect(() => {
     const q = query(collection(db, "articles"), orderBy("createdAt", "desc"));
 
@@ -615,6 +643,55 @@ useEffect(() => {
     return () => unsub();
   }, []);
 
+  // ---------- preguntas sin responder (solo doctor) ----------
+  useEffect(() => {
+    if (!isDoctor) {
+      setDoctorQuestions([]);
+      setDoctorQuestionsLoading(false);
+      return;
+    }
+
+    const qRef = query(
+      collection(db, "questions"),
+      orderBy("lastMessageAt", "desc")
+    );
+
+    const unsub = onSnapshot(
+      qRef,
+      (snap) => {
+        try {
+          const all: QuestionSummary[] = [];
+          snap.forEach((docSnap) => {
+            const data = docSnap.data() as any;
+            all.push({
+              id: docSnap.id,
+              userId: data.userId,
+              subject: data.subject ?? "",
+              message: data.message ?? "",
+              status: data.status ?? "pending",
+              createdAt: data.createdAt,
+              lastMessageText: data.lastMessageText,
+              lastMessageAt: data.lastMessageAt,
+            });
+          });
+
+          const pending = all.filter((q) => q.status === "pending");
+          setDoctorQuestions(pending);
+        } catch (e) {
+          console.log("Error procesando preguntas doctor:", e);
+        } finally {
+          setDoctorQuestionsLoading(false);
+        }
+      },
+      (error) => {
+        console.log("Error escuchando questions (doctor):", error);
+        setDoctorQuestionsLoading(false);
+      }
+    );
+
+    return () => unsub();
+  }, [isDoctor]);
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -636,7 +713,12 @@ useEffect(() => {
     return `Pediatra ${base}`;
   };
 
-  // --------- resumen crecimiento y desarrollo ------------------------
+    // ¿Tiene preguntas disponibles?
+  const hasAvailableQuestions =
+    !isDoctor && questionsBalance !== null && questionsBalance > 0;
+
+
+  // --------- crecimiento y desarrollo resumen ----------
   let currentGrowthVisit: GrowthVisitDef | null = null;
   let growthDone = false;
 
@@ -670,7 +752,7 @@ useEffect(() => {
     }
   };
 
-  // --------- resumen de vacunas (usando childAgeMonths + vaccineRecords) ---
+  // --------- vacunas resumen ----------
   let pendingCount = 0;
   let nextDoseDescription =
     "Registra la fecha de nacimiento en el perfil para ver el esquema.";
@@ -694,9 +776,8 @@ useEffect(() => {
       }
     }
   }
-  // ------------------------------------------------------------------------
 
-  // ---------------- Preguntas ----------------
+  // ---------------- Preguntas padres ----------------
   const openQuestionModal = () => {
     if (!hasAcceptedConsent) {
       setConsentVisible(true);
@@ -730,8 +811,18 @@ useEffect(() => {
       return;
     }
 
+    // Validar saldo antes de enviar
+    if (questionsBalance === null || questionsBalance <= 0) {
+      alert(
+        "No tienes preguntas disponibles en este momento. Compra un paquete en la tienda."
+      );
+      return;
+    }
+
     try {
       setSending(true);
+
+      // 1) Crear la pregunta
       await addDoc(collection(db, "questions"), {
         userId: user.uid,
         subject: subject.trim(),
@@ -742,6 +833,17 @@ useEffect(() => {
         lastMessageAt: serverTimestamp(),
       });
 
+      // 2) Descontar 1 pregunta en Firestore
+      const userRef = doc(db, "users", user.uid);
+      await updateDoc(userRef, {
+        questions: increment(-1),
+      });
+
+      // 3) Actualizar el estado local para que la UI se refresque al instante
+      setQuestionsBalance((prev) =>
+        prev !== null ? Math.max(prev - 1, 0) : prev
+      );
+
       setQuestionVisible(false);
       alert("Tu pregunta fue enviada. Un pediatra la revisará pronto.");
     } catch (e) {
@@ -751,6 +853,7 @@ useEffect(() => {
       setSending(false);
     }
   };
+
 
   // ---------------- Artículos ----------------
   const openArticleModal = () => {
@@ -772,8 +875,6 @@ useEffect(() => {
       alert("Necesitamos permiso para acceder a tus fotos.");
       return;
     }
-
-
 
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -842,501 +943,674 @@ useEffect(() => {
     setArticleDetailVisible(true);
   };
 
-const getFaqAvatarUrl = (text: string) => {
-  const clean = text?.trim() || "IA Pediatría";
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    clean
-  )}&background=random&color=ffffff&size=80&bold=true&rounded=true`;
-};
+  const getFaqAvatarUrl = (text: string) => {
+    const clean = text?.trim() || "IA Pediatría";
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      clean
+    )}&background=random&color=ffffff&size=80&bold=true&rounded=true`;
+  };
 
-return (
-  <View style={styles.container}>
+  // ---------------- UI ----------------
+  return (
+    <View style={styles.container}>
     <ScrollView contentContainerStyle={styles.content}>
       <Text style={styles.greeting}>Hola, {firstName}</Text>
       <Text style={styles.subtitle}>
         {isDoctor
-          ? "Comparte artículos con las familias."
+          ? "Revisa las preguntas de las familias y comparte artículos."
           : "Explora recomendaciones de nuestros pediatras."}
       </Text>
+         
 
-      {/* Carrusel de artículos */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.articlesRow}
-      >
+        {/* Preguntas sin responder (solo doctor) */}
         {isDoctor && (
-          <TouchableOpacity
-            style={styles.newArticleCard}
-            onPress={openArticleModal}
-          >
-            <Ionicons name="add" size={32} color="#4B5563" />
-            <Text style={styles.newArticleText}>Nuevo artículo</Text>
-          </TouchableOpacity>
-        )}
-
-        {articlesLoading ? (
-          <View style={styles.articlesLoading}>
-            <ActivityIndicator size="small" color="#6B7280" />
-            <Text style={styles.articlesLoadingText}>
-              Cargando artículos…
-            </Text>
-          </View>
-        ) : articles.length === 0 ? (
-          <View style={styles.emptyArticlesCard}>
-            <Text style={styles.emptyArticlesText}>
-              Aún no hay artículos publicados.
-            </Text>
-          </View>
-        ) : (
-          articles.map((article) => (
-            <TouchableOpacity
-              key={article.id}
-              activeOpacity={0.9}
-              style={styles.articleCard}
-              onPress={() => openArticleDetail(article)}
-            >
-              {article.imageUrl ? (
-                <Image
-                  source={{ uri: article.imageUrl }}
-                  style={styles.articleImage}
-                  resizeMode="cover"
-                />
-              ) : (
-                <View style={styles.articleImagePlaceholder}>
-                  <Ionicons
-                    name="image-outline"
-                    size={28}
-                    color="#9CA3AF"
-                  />
+          <View style={styles.doctorQuestionsCard}>
+            <View style={styles.doctorQuestionsHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.doctorQuestionsTitle}>
+                  Preguntas sin responder
+                </Text>
+                <Text style={styles.doctorQuestionsSubtitle}>
+                  Consultas que siguen en estado pendiente.
+                </Text>
+              </View>
+              {doctorQuestions.length > 0 && !doctorQuestionsLoading && (
+                <View style={styles.doctorBadge}>
+                  <Text style={styles.doctorBadgeText}>
+                    {doctorQuestions.length}
+                  </Text>
                 </View>
               )}
-
-              <LinearGradient
-                colors={["transparent", "rgba(0,0,0,0.8)"]}
-                style={styles.articleGradient}
-              />
-
-              <View style={styles.articleTitleContainer}>
-                <Text style={styles.articleTitleOverlay} numberOfLines={2}>
-                  {article.title}
-                </Text>
-              </View>
-            </TouchableOpacity>
-          ))
-        )}
-      </ScrollView>
-
-      {/* Crecimiento y desarrollo */}
-      <View style={styles.growthCard}>
-        <View style={styles.growthHeaderRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.growthTitle}>Crecimiento y desarrollo</Text>
-            <Text style={styles.growthSubtitle}>
-              {childAgeMonths !== null
-                ? `Edad aproximada: ${childAgeMonths} meses`
-                : "Completa la fecha de nacimiento en el perfil para ver estos recordatorios."}
-            </Text>
-          </View>
-
-          <TouchableOpacity
-            onPress={() => router.push("/crecimiento")}
-            style={styles.growthLink}
-          >
-            <Text style={styles.growthLinkText}>Ver detalle</Text>
-            <Ionicons name="chevron-forward" size={16} color="#111827" />
-          </TouchableOpacity>
-        </View>
-
-        {currentGrowthVisit && (
-          <View style={styles.growthBodyRow}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.growthCurrentLabel}>
-                {currentGrowthVisit.label}
-              </Text>
-              <Text style={styles.growthCurrentDescription}>
-                {growthDone
-                  ? "Marcaste esta cita como realizada."
-                  : "Recuerda agendar tu cita de crecimiento y desarrollo."}
-              </Text>
             </View>
 
+            {doctorQuestionsLoading ? (
+              <View style={styles.doctorLoadingBox}>
+                <ActivityIndicator size="small" color="#6B7280" />
+                <Text style={styles.doctorLoadingText}>
+                  Cargando preguntas…
+                </Text>
+              </View>
+            ) : doctorQuestions.length === 0 ? (
+              <Text style={styles.doctorEmptyText}>
+                No tienes preguntas pendientes por responder en este momento.
+              </Text>
+            ) : (
+              <View style={styles.doctorList}>
+                {doctorQuestions.slice(0, 5).map((q) => {
+                  const preview = q.lastMessageText || q.message;
+                  return (
+                    <TouchableOpacity
+                      key={q.id}
+                      style={styles.doctorQuestionItem}
+                      onPress={() =>
+                        router.push({
+                          pathname: "/chat/[questionId]",
+                          params: {
+                            questionId: q.id,
+                            subject: q.subject,
+                            userId: q.userId,
+                          },
+                        })
+                      }
+                    >
+                      {q.subject ? (
+                        <Text
+                          style={styles.doctorQuestionSubject}
+                          numberOfLines={1}
+                        >
+                          {q.subject}
+                        </Text>
+                      ) : null}
+                      <Text
+                        style={styles.doctorQuestionPreview}
+                        numberOfLines={2}
+                      >
+                        {preview}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+                {doctorQuestions.length > 5 && (
+                  <TouchableOpacity
+                    style={styles.doctorSeeAllButton}
+                    onPress={() => router.push("/questions")}
+                  >
+                    <Text style={styles.doctorSeeAllText}>
+                      Ver todas las consultas
+                    </Text>
+                    <Ionicons
+                      name="chevron-forward"
+                      size={16}
+                      color="#111827"
+                    />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Carrusel de artículos */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.articlesRow}
+        >
+          {isDoctor && (
             <TouchableOpacity
-              style={styles.growthCheckButton}
-              onPress={handleToggleGrowth}
+              style={styles.newArticleCard}
+              onPress={openArticleModal}
             >
-              <Ionicons
-                name={growthDone ? "checkmark-circle" : "ellipse-outline"}
-                size={26}
-                color={growthDone ? "#16a34a" : "#4B5563"}
-              />
+              <Ionicons name="add" size={32} color="#4B5563" />
+              <Text style={styles.newArticleText}>Nuevo artículo</Text>
             </TouchableOpacity>
-          </View>
-        )}
-      </View>
+          )}
 
-      {/* Resumen de vacunas */}
-      <View style={styles.vaccinesCard}>
-        <View style={styles.vaccinesHeaderRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.vaccinesTitle}>Vacunas</Text>
-            <Text style={styles.vaccinesSubtitle}>
-              {childAgeMonths !== null
-                ? `Edad aproximada: ${childAgeMonths} meses`
-                : "Completa la fecha de nacimiento en el perfil para ver el esquema."}
-            </Text>
-          </View>
-
-          <TouchableOpacity onPress={() => router.push("/vacunas")}>
-            <View style={styles.vaccinesLink}>
-              <Text style={styles.vaccinesLinkText}>Ver detalle</Text>
-              <Ionicons name="chevron-forward" size={16} color="#111827" />
-            </View>
-          </TouchableOpacity>
-        </View>
-
-        <View style={styles.vaccinesSummaryRow}>
-          <View style={styles.vaccinesSummaryItem}>
-            <Text style={styles.vaccinesSummaryNumber}>{pendingCount}</Text>
-            <Text style={styles.vaccinesSummaryLabel}>dosis pendientes</Text>
-          </View>
-          <View style={[styles.vaccinesSummaryItem, { flex: 2 }]}>
-            <Text style={styles.vaccinesNextLabel}>Próxima vacuna</Text>
-            <Text style={styles.vaccinesNextValue}>
-              {nextDoseDescription}
-            </Text>
-          </View>
-        </View>
-      </View>
-
-      {/* Preguntas frecuentes (IA) */}
-      <View style={styles.faqCard}>
-        <View style={styles.faqHeaderRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.faqTitle}>Preguntas frecuentes</Text>
-            <Text style={styles.faqSubtitle}>
-              Respuestas generadas con IA según la edad de tu peque.
-            </Text>
-          </View>
-
-          <Ionicons name="help-circle-outline" size={22} color="#4B5563" />
-        </View>
-
-        {faqsLoading ? (
-          <View style={styles.faqLoadingBox}>
-            <ActivityIndicator size="small" color="#6B7280" />
-            <Text style={styles.faqLoadingText}>
-              Buscando respuestas para ti…
-            </Text>
-          </View>
-        ) : faqsError ? (
-          <Text style={styles.faqErrorText}>{faqsError}</Text>
-        ) : faqs.length === 0 ? (
-          <Text style={styles.faqEmptyText}>
-            Aún no tenemos preguntas frecuentes para mostrar. Vuelve más
-            tarde o haz tu propia pregunta.
-          </Text>
-        ) : (
-          <View style={styles.faqList}>
-              {faqs.slice(0, 3).map((faq) => (
-                <View key={faq.id} style={styles.faqItem}>
-                  <View style={styles.faqQuestionRow}>
-                    <Text style={styles.faqQuestionText}>{faq.question}</Text>
-                  </View>
-                  <Text style={styles.faqAnswerText}>{faq.answer}</Text>
-                </View>
-              ))}
-
-
-          </View>
-        )}
-      </View>
-
-      {/* Botón Haz tu pregunta */}
-      <TouchableOpacity style={styles.mainButton} onPress={openQuestionModal}>
-        <Text style={styles.mainButtonText}>Haz tu pregunta</Text>
-      </TouchableOpacity>
-    </ScrollView>
-
-    {/* MODAL DE CONSENTIMIENTO */}
-    <Modal
-      visible={consentVisible}
-      transparent
-      animationType="fade"
-      onRequestClose={() => setConsentVisible(false)}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.consentBox}>
-            <Text style={styles.consentTitle}>Consentimiento</Text>
-            <Text style={styles.consentIntro}>
-              Antes de continuar, por favor lee y acepta estas condiciones:
-            </Text>
-
-            <View style={styles.consentList}>
-              <Text style={styles.consentItem}>
-                • Acepto que la información recibida es orientación general.
-              </Text>
-              <Text style={styles.consentItem}>
-                • No se formula diagnóstico ni se ordenan exámenes.
-              </Text>
-              <Text style={styles.consentItem}>
-                • No se prescribe medicación.
-              </Text>
-              <Text style={styles.consentItem}>
-                • Los datos personales serán tratados según la Ley 1581 de
-                2012.
-              </Text>
-              <Text style={styles.consentItem}>
-                • En caso de urgencia acudiré a un servicio médico.
+          {articlesLoading ? (
+            <View style={styles.articlesLoading}>
+              <ActivityIndicator size="small" color="#6B7280" />
+              <Text style={styles.articlesLoadingText}>
+                Cargando artículos…
               </Text>
             </View>
-
-            <View style={styles.consentButtonsRow}>
+          ) : articles.length === 0 ? (
+            <View style={styles.emptyArticlesCard}>
+              <Text style={styles.emptyArticlesText}>
+                Aún no hay artículos publicados.
+              </Text>
+            </View>
+          ) : (
+            articles.map((article) => (
               <TouchableOpacity
-                style={styles.consentCancel}
-                onPress={() => setConsentVisible(false)}
+                key={article.id}
+                activeOpacity={0.9}
+                style={styles.articleCard}
+                onPress={() => openArticleDetail(article)}
               >
-                <Text style={styles.consentCancelText}>Cancelar</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.consentAccept}
-                onPress={handleAcceptConsent}
-              >
-                <Text style={styles.consentAcceptText}>
-                  Acepto y deseo continuar
-                </Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
-
-    {/* MODAL PARA HACER LA PREGUNTA */}
-    <Modal
-      visible={questionVisible}
-      transparent
-      animationType="slide"
-      onRequestClose={closeQuestionModal}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-          >
-            <View style={styles.bottomSheet}>
-              <View style={styles.sheetHandle} />
-
-              <Text style={styles.sheetTitle}>Haz tu pregunta</Text>
-              <Text style={styles.sheetSubtitle}>
-                Describe brevemente qué te preocupa sobre tu peque.
-              </Text>
-
-              <Text style={styles.label}>Asunto</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej. Fiebre alta en la noche"
-                placeholderTextColor="#9CA3AF"
-                value={subject}
-                onChangeText={setSubject}
-                returnKeyType="next"
-              />
-
-              <Text style={styles.label}>Mensaje</Text>
-              <TextInput
-                style={[styles.input, styles.messageInput]}
-                placeholder="Cuéntanos síntomas, tiempo de evolución, edad de tu hijo, etc."
-                placeholderTextColor="#9CA3AF"
-                value={message}
-                onChangeText={setMessage}
-                multiline
-                textAlignVertical="top"
-              />
-
-              <View style={styles.sheetButtonsRow}>
-                <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={closeQuestionModal}
-                  disabled={sending}
-                >
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
-                </TouchableOpacity>
-
-                <TouchableOpacity
-                  style={[styles.sendButton, sending && { opacity: 0.7 }]}
-                  onPress={handleSendQuestion}
-                  disabled={sending}
-                >
-                  <Text style={styles.sendButtonText}>
-                    {sending ? "Enviando..." : "Enviar pregunta"}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </View>
-          </KeyboardAvoidingView>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
-
-    {/* MODAL NUEVO ARTÍCULO (solo doctor) */}
-    <Modal
-      visible={articleModalVisible}
-      transparent
-      animationType="slide"
-      onRequestClose={closeArticleModal}
-    >
-      <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView
-            behavior={Platform.OS === "ios" ? "padding" : undefined}
-          >
-            <View style={styles.bottomSheet}>
-              <View style={styles.sheetHandle} />
-              <Text style={styles.sheetTitle}>Nuevo artículo</Text>
-              <Text style={styles.sheetSubtitle}>
-                Comparte información útil con las familias.
-              </Text>
-
-              <TouchableOpacity
-                style={styles.imagePickerButton}
-                onPress={pickArticleImage}
-                disabled={uploadingArticleImage}
-              >
-                {newArticleImage ? (
+                {article.imageUrl ? (
                   <Image
-                    source={{ uri: newArticleImage }}
-                    style={styles.articlePreviewImage}
+                    source={{ uri: article.imageUrl }}
+                    style={styles.articleImage}
                     resizeMode="cover"
                   />
                 ) : (
-                  <>
-                    {uploadingArticleImage ? (
-                      <ActivityIndicator size="small" color="#6B7280" />
-                    ) : (
-                      <Ionicons
-                        name="image-outline"
-                        size={22}
-                        color="#6B7280"
-                      />
-                    )}
-                    <Text style={styles.imagePickerText}>Añadir imagen</Text>
-                  </>
+                  <View style={styles.articleImagePlaceholder}>
+                    <Ionicons
+                      name="image-outline"
+                      size={28}
+                      color="#9CA3AF"
+                    />
+                  </View>
                 )}
+
+                <LinearGradient
+                  colors={["transparent", "rgba(0,0,0,0.8)"]}
+                  style={styles.articleGradient}
+                />
+
+                <View style={styles.articleTitleContainer}>
+                  <Text
+                    style={styles.articleTitleOverlay}
+                    numberOfLines={2}
+                  >
+                    {article.title}
+                  </Text>
+                </View>
               </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
 
-              <Text style={styles.label}>Título</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej. Cómo manejar la fiebre en casa"
-                placeholderTextColor="#9CA3AF"
-                value={newArticleTitle}
-                onChangeText={setNewArticleTitle}
-              />
+        {/* Crecimiento y desarrollo (solo padres) */}
+        {!isDoctor && (
+          <View style={styles.growthCard}>
+            <View style={styles.growthHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.growthTitle}>
+                  Crecimiento y desarrollo
+                </Text>
+                <Text style={styles.growthSubtitle}>
+                  {childAgeMonths !== null
+                    ? `Edad aproximada: ${childAgeMonths} meses`
+                    : "Completa la fecha de nacimiento en el perfil para ver estos recordatorios."}
+                </Text>
+              </View>
 
-              <Text style={styles.label}>Texto</Text>
-              <TextInput
-                style={[styles.input, styles.messageInput]}
-                placeholder="Escribe aquí el contenido del artículo."
-                placeholderTextColor="#9CA3AF"
-                value={newArticleText}
-                onChangeText={setNewArticleText}
-                multiline
-                textAlignVertical="top"
-              />
+              <TouchableOpacity
+                onPress={() => router.push("/crecimiento")}
+                style={styles.growthLink}
+              >
+                <Text style={styles.growthLinkText}>Ver detalle</Text>
+                <Ionicons
+                  name="chevron-forward"
+                  size={16}
+                  color="#111827"
+                />
+              </TouchableOpacity>
+            </View>
 
-              <View style={styles.sheetButtonsRow}>
+            {currentGrowthVisit && (
+              <View style={styles.growthBodyRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.growthCurrentLabel}>
+                    {currentGrowthVisit.label}
+                  </Text>
+                  <Text style={styles.growthCurrentDescription}>
+                    {growthDone
+                      ? "Marcaste esta cita como realizada."
+                      : "Recuerda agendar tu cita de crecimiento y desarrollo."}
+                  </Text>
+                </View>
+
                 <TouchableOpacity
-                  style={styles.cancelButton}
-                  onPress={closeArticleModal}
-                  disabled={savingArticle}
+                  style={styles.growthCheckButton}
+                  onPress={handleToggleGrowth}
                 >
-                  <Text style={styles.cancelButtonText}>Cancelar</Text>
+                  <Ionicons
+                    name={
+                      growthDone ? "checkmark-circle" : "ellipse-outline"
+                    }
+                    size={26}
+                    color={growthDone ? "#16a34a" : "#4B5563"}
+                  />
+                </TouchableOpacity>
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Resumen de vacunas (solo padres) */}
+        {!isDoctor && (
+          <View style={styles.vaccinesCard}>
+            <View style={styles.vaccinesHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.vaccinesTitle}>Vacunas</Text>
+                <Text style={styles.vaccinesSubtitle}>
+                  {childAgeMonths !== null
+                    ? `Edad aproximada: ${childAgeMonths} meses`
+                    : "Completa la fecha de nacimiento en el perfil para ver el esquema."}
+                </Text>
+              </View>
+
+              <TouchableOpacity onPress={() => router.push("/vacunas")}>
+                <View style={styles.vaccinesLink}>
+                  <Text style={styles.vaccinesLinkText}>Ver detalle</Text>
+                  <Ionicons
+                    name="chevron-forward"
+                    size={16}
+                    color="#111827"
+                  />
+                </View>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.vaccinesSummaryRow}>
+              <View style={styles.vaccinesSummaryItem}>
+                <Text style={styles.vaccinesSummaryNumber}>
+                  {pendingCount}
+                </Text>
+                <Text style={styles.vaccinesSummaryLabel}>
+                  dosis pendientes
+                </Text>
+              </View>
+              <View style={[styles.vaccinesSummaryItem, { flex: 2 }]}>
+                <Text style={styles.vaccinesNextLabel}>
+                  Próxima vacuna
+                </Text>
+                <Text style={styles.vaccinesNextValue}>
+                  {nextDoseDescription}
+                </Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* Preguntas frecuentes IA (solo padres) */}
+        {!isDoctor && (
+          <View style={styles.faqCard}>
+            <View style={styles.faqHeaderRow}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.faqTitle}>Preguntas frecuentes</Text>
+                <Text style={styles.faqSubtitle}>
+                  Respuestas generadas con IA según la edad de tu peque.
+                </Text>
+              </View>
+
+              <Ionicons
+                name="help-circle-outline"
+                size={22}
+                color="#4B5563"
+              />
+            </View>
+
+            {faqsLoading ? (
+              <View style={styles.faqLoadingBox}>
+                <ActivityIndicator size="small" color="#6B7280" />
+                <Text style={styles.faqLoadingText}>
+                  Buscando respuestas para ti…
+                </Text>
+              </View>
+            ) : faqsError ? (
+              <Text style={styles.faqErrorText}>{faqsError}</Text>
+            ) : faqs.length === 0 ? (
+              <Text style={styles.faqEmptyText}>
+                Aún no tenemos preguntas frecuentes para mostrar. Vuelve más
+                tarde o haz tu propia pregunta.
+              </Text>
+            ) : (
+              <View style={styles.faqList}>
+                {faqs.slice(0, 3).map((faq) => (
+                  <View key={faq.id} style={styles.faqItem}>
+                    <View style={styles.faqQuestionRow}>
+                      <Text style={styles.faqQuestionText}>
+                        {faq.question}
+                      </Text>
+                    </View>
+                    <Text style={styles.faqAnswerText}>{faq.answer}</Text>
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+        )}
+
+        {/* Botón Haz tu pregunta (solo padres) + saldo de preguntas */}
+               {/* Botón Haz tu pregunta (solo padres) + saldo de preguntas */}
+        {!isDoctor && (
+          <>
+            <TouchableOpacity
+              style={[
+                styles.mainButton,
+                !hasAvailableQuestions && styles.mainButtonDisabled,
+              ]}
+              onPress={hasAvailableQuestions ? openQuestionModal : undefined}
+              activeOpacity={hasAvailableQuestions ? 0.8 : 1}
+              disabled={!hasAvailableQuestions}
+            >
+              {!hasAvailableQuestions && (
+                <Ionicons
+                  name="lock-closed"
+                  size={18}
+                  color="#111827"
+                  style={{ marginRight: 8 }}
+                />
+              )}
+              <Text style={styles.mainButtonText}>Haz tu pregunta</Text>
+            </TouchableOpacity>
+
+
+            <View style={styles.questionsInfoContainer}>
+              {questionsBalance !== null && questionsBalance > 0 ? (
+                <Text style={styles.questionsInfoText}>
+                  Tienes {questionsBalance} pregunta
+                  {questionsBalance === 1 ? "" : "s"} disponible
+                  {questionsBalance === 1 ? "" : "s"}.
+                </Text>
+              ) : (
+                <TouchableOpacity
+                  onPress={() => router.push("/store")}
+                  style={styles.questionsInfoLinkWrapper}
+                >
+                  <Text style={styles.questionsInfoText}>
+                    No tienes preguntas disponibles.{" "}
+                    <Text style={styles.questionsInfoLink}>
+                      Compra aquí.
+                    </Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </>
+        )}
+      </ScrollView>
+
+      {/* MODAL DE CONSENTIMIENTO */}
+      <Modal
+        visible={consentVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setConsentVisible(false)}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <View style={styles.consentBox}>
+              <Text style={styles.consentTitle}>Consentimiento</Text>
+              <Text style={styles.consentIntro}>
+                Antes de continuar, por favor lee y acepta estas condiciones:
+              </Text>
+
+              <View style={styles.consentList}>
+                <Text style={styles.consentItem}>
+                  • Acepto que la información recibida es orientación general.
+                </Text>
+                <Text style={styles.consentItem}>
+                  • No se formula diagnóstico ni se ordenan exámenes.
+                </Text>
+                <Text style={styles.consentItem}>
+                  • No se prescribe medicación.
+                </Text>
+                <Text style={styles.consentItem}>
+                  • Los datos personales serán tratados según la Ley 1581 de
+                  2012.
+                </Text>
+                <Text style={styles.consentItem}>
+                  • En caso de urgencia acudiré a un servicio médico.
+                </Text>
+              </View>
+
+              <View style={styles.consentButtonsRow}>
+                <TouchableOpacity
+                  style={styles.consentCancel}
+                  onPress={() => setConsentVisible(false)}
+                >
+                  <Text style={styles.consentCancelText}>Cancelar</Text>
                 </TouchableOpacity>
 
                 <TouchableOpacity
-                  style={[styles.sendButton, savingArticle && { opacity: 0.7 }]}
-                  onPress={handleSaveArticle}
-                  disabled={savingArticle}
+                  style={styles.consentAccept}
+                  onPress={handleAcceptConsent}
                 >
-                  <Text style={styles.sendButtonText}>
-                    {savingArticle ? "Guardando..." : "Publicar"}
+                  <Text style={styles.consentAcceptText}>
+                    Acepto y deseo continuar
                   </Text>
                 </TouchableOpacity>
               </View>
             </View>
-          </KeyboardAvoidingView>
-        </View>
-      </TouchableWithoutFeedback>
-    </Modal>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
 
-    {/* MODAL DETALLE ARTÍCULO */}
-    <Modal
-      visible={articleDetailVisible}
-      transparent
-      animationType="slide"
-      onRequestClose={closeArticleDetail}
-    >
-      <View style={styles.detailOverlay}>
-        <KeyboardAvoidingView
-          behavior={Platform.OS === "ios" ? "padding" : undefined}
-          style={{ flex: 1 }}
-        >
-          <Animated.View
-            style={[
-              styles.detailSheet,
-              { transform: [{ translateY }] },
-            ]}
-            {...panResponder.panHandlers}
-          >
-            <View style={styles.sheetHandle} />
-
-            <TouchableOpacity
-              style={styles.detailCloseButton}
-              onPress={closeArticleDetail}
+      {/* MODAL PARA HACER LA PREGUNTA (padres) */}
+      <Modal
+        visible={questionVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeQuestionModal}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
-              <Ionicons name="close" size={20} color="#4B5563" />
-            </TouchableOpacity>
+              <View style={styles.bottomSheet}>
+                <View style={styles.sheetHandle} />
 
-            <ScrollView
-              style={{ flex: 1 }}
-              contentContainerStyle={styles.detailContent}
-              showsVerticalScrollIndicator={false}
-              scrollEventThrottle={16}
-              onScroll={(event) => {
-                scrollOffsetY.current = event.nativeEvent.contentOffset.y;
-              }}
+                <Text style={styles.sheetTitle}>Haz tu pregunta</Text>
+                <Text style={styles.sheetSubtitle}>
+                  Describe brevemente qué te preocupa sobre tu peque.
+                </Text>
+
+                <Text style={styles.label}>Asunto</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej. Fiebre alta en la noche"
+                  placeholderTextColor="#9CA3AF"
+                  value={subject}
+                  onChangeText={setSubject}
+                  returnKeyType="next"
+                />
+
+                <Text style={styles.label}>Mensaje</Text>
+                <TextInput
+                  style={[styles.input, styles.messageInput]}
+                  placeholder="Cuéntanos síntomas, tiempo de evolución, edad de tu hijo, etc."
+                  placeholderTextColor="#9CA3AF"
+                  value={message}
+                  onChangeText={setMessage}
+                  multiline
+                  textAlignVertical="top"
+                />
+
+                <View style={styles.sheetButtonsRow}>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={closeQuestionModal}
+                    disabled={sending}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[styles.sendButton, sending && { opacity: 0.7 }]}
+                    onPress={handleSendQuestion}
+                    disabled={sending}
+                  >
+                    <Text style={styles.sendButtonText}>
+                      {sending ? "Enviando..." : "Enviar pregunta"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* MODAL NUEVO ARTÍCULO (solo doctor) */}
+      <Modal
+        visible={articleModalVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeArticleModal}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <View style={styles.modalOverlay}>
+            <KeyboardAvoidingView
+              behavior={Platform.OS === "ios" ? "padding" : undefined}
             >
-              {selectedArticle && (
-                <>
-                  {selectedArticle.imageUrl && (
+              <View style={styles.bottomSheet}>
+                <View style={styles.sheetHandle} />
+                <Text style={styles.sheetTitle}>Nuevo artículo</Text>
+                <Text style={styles.sheetSubtitle}>
+                  Comparte información útil con las familias.
+                </Text>
+
+                <TouchableOpacity
+                  style={styles.imagePickerButton}
+                  onPress={pickArticleImage}
+                  disabled={uploadingArticleImage}
+                >
+                  {newArticleImage ? (
                     <Image
-                      source={{ uri: selectedArticle.imageUrl }}
-                      style={styles.detailImage}
+                      source={{ uri: newArticleImage }}
+                      style={styles.articlePreviewImage}
                       resizeMode="cover"
                     />
+                  ) : (
+                    <>
+                      {uploadingArticleImage ? (
+                        <ActivityIndicator size="small" color="#6B7280" />
+                      ) : (
+                        <Ionicons
+                          name="image-outline"
+                          size={22}
+                          color="#6B7280"
+                        />
+                      )}
+                      <Text style={styles.imagePickerText}>
+                        Añadir imagen
+                      </Text>
+                    </>
                   )}
+                </TouchableOpacity>
 
-                  <Text style={styles.detailTitle}>
-                    {selectedArticle.title}
-                  </Text>
-                  <Text style={styles.detailDoctor}>
-                    Publicado por{" "}
-                    {getDoctorLabel(selectedArticle.doctorName)}
-                  </Text>
-                  <Text style={styles.detailText}>
-                    {selectedArticle.text}
-                  </Text>
-                </>
-              )}
-            </ScrollView>
-          </Animated.View>
-        </KeyboardAvoidingView>
-      </View>
-    </Modal>
-  </View>
-);
+                <Text style={styles.label}>Título</Text>
+                <TextInput
+                  style={styles.input}
+                  placeholder="Ej. Cómo manejar la fiebre en casa"
+                  placeholderTextColor="#9CA3AF"
+                  value={newArticleTitle}
+                  onChangeText={setNewArticleTitle}
+                />
+
+                <Text style={styles.label}>Texto</Text>
+                <Text style={styles.richTextHint}>
+  Puedes usar formato: # título, **negrilla**, *cursiva*.
+</Text>
+
+                <TextInput
+                  style={[styles.input, styles.messageInput]}
+                  placeholder="Escribe aquí el contenido del artículo."
+                  placeholderTextColor="#9CA3AF"
+                  value={newArticleText}
+                  onChangeText={setNewArticleText}
+                  multiline
+                  textAlignVertical="top"
+                />
+
+                <View style={styles.sheetButtonsRow}>
+                  <TouchableOpacity
+                    style={styles.cancelButton}
+                    onPress={closeArticleModal}
+                    disabled={savingArticle}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancelar</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.sendButton,
+                      savingArticle && { opacity: 0.7 },
+                    ]}
+                    onPress={handleSaveArticle}
+                    disabled={savingArticle}
+                  >
+                    <Text style={styles.sendButtonText}>
+                      {savingArticle ? "Guardando..." : "Publicar"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </KeyboardAvoidingView>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* MODAL DETALLE ARTÍCULO */}
+      <Modal
+        visible={articleDetailVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={closeArticleDetail}
+      >
+        <View style={styles.detailOverlay}>
+          <KeyboardAvoidingView
+            behavior={Platform.OS === "ios" ? "padding" : undefined}
+            style={{ flex: 1 }}
+          >
+            <Animated.View
+              style={[styles.detailSheet, { transform: [{ translateY }] }]}
+              {...panResponder.panHandlers}
+            >
+              <View style={styles.sheetHandle} />
+
+              <TouchableOpacity
+                style={styles.detailCloseButton}
+                onPress={closeArticleDetail}
+              >
+                <Ionicons name="close" size={20} color="#4B5563" />
+              </TouchableOpacity>
+
+              <ScrollView
+                style={{ flex: 1 }}
+                contentContainerStyle={styles.detailContent}
+                showsVerticalScrollIndicator={false}
+                scrollEventThrottle={16}
+                onScroll={(event) => {
+                  scrollOffsetY.current =
+                    event.nativeEvent.contentOffset.y;
+                }}
+              >
+                {selectedArticle && (
+                  <>
+                    {selectedArticle.imageUrl && (
+                      <Image
+                        source={{ uri: selectedArticle.imageUrl }}
+                        style={styles.detailImage}
+                        resizeMode="cover"
+                      />
+                    )}
+
+                    <Text style={styles.detailTitle}>
+                      {selectedArticle.title}
+                    </Text>
+                    <Text style={styles.detailDoctor}>
+                      Publicado por{" "}
+                      {getDoctorLabel(selectedArticle.doctorName)}
+                    </Text>
+                   <Markdown style={markdownStyles}>
+  {selectedArticle.text}
+</Markdown>
+
+                  </>
+                )}
+              </ScrollView>
+            </Animated.View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </View>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -1344,9 +1618,15 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FDF8F5",
   },
+  richTextHint: {
+  fontSize: 11,
+  color: "#6B7280",
+  marginBottom: 6,
+},
+
   content: {
     paddingHorizontal: 24,
-    paddingTop: 32,
+    paddingTop: 24,
     paddingBottom: 40,
   },
   loadingContainer: {
@@ -1354,6 +1634,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "#FDF8F5",
+  },
+
+  // header
+  headerRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+  storeIconButton: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+    backgroundColor: "#FFFFFF",
   },
 
   greeting: {
@@ -1365,7 +1663,6 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#4B5563",
     marginTop: 4,
-    marginBottom: 18,
   },
 
   // artículos
@@ -1373,7 +1670,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     paddingRight: 8,
   },
-    faqIcon: {
+  faqIcon: {
     width: 24,
     height: 24,
     borderRadius: 999,
@@ -1597,11 +1894,34 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row", // para icono + texto
   },
+  mainButtonDisabled: {
+    backgroundColor: "#E5E7EB",
+  },
+
   mainButtonText: {
     color: "#111827",
     fontSize: 16,
     fontWeight: "600",
+  },
+
+  // info saldo preguntas
+  questionsInfoContainer: {
+    marginTop: 8,
+  },
+  questionsInfoText: {
+    fontSize: 13,
+    color: "#4B5563",
+  },
+  questionsInfoLinkWrapper: {
+    alignSelf: "flex-start",
+  },
+  questionsInfoLink: {
+    color: "#111827",
+    fontWeight: "600",
+    textDecorationLine: "underline",
   },
 
   // Modal / bottom sheet (pregunta + artículo nuevo)
@@ -1828,7 +2148,8 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#111827",
   },
-    // FAQ IA
+
+  // FAQ IA
   faqCard: {
     marginTop: 20,
     borderRadius: 16,
@@ -1913,4 +2234,130 @@ const styles = StyleSheet.create({
     color: "#4B5563",
     marginTop: 2,
   },
+
+  // Preguntas sin responder (doctor)
+  doctorQuestionsCard: {
+    marginBottom: 18,
+    borderRadius: 16,
+    backgroundColor: "#F9FAFB",
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  doctorQuestionsHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  doctorQuestionsTitle: {
+    fontSize: 18,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  doctorQuestionsSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginTop: 2,
+  },
+  doctorBadge: {
+    minWidth: 28,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#75e2da",
+    alignItems: "center",
+    justifyContent: "center",
+    marginLeft: 8,
+  },
+  doctorBadgeText: {
+    color: "#111827",
+    fontWeight: "700",
+    fontSize: 12,
+  },
+  doctorLoadingBox: {
+    marginTop: 10,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  doctorLoadingText: {
+    marginTop: 4,
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  doctorEmptyText: {
+    marginTop: 10,
+    fontSize: 13,
+    color: "#6B7280",
+  },
+  doctorList: {
+    marginTop: 10,
+    gap: 8,
+  },
+  doctorQuestionItem: {
+    backgroundColor: "#FDF8F5",
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: "#E5E7EB",
+  },
+  doctorQuestionSubject: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#111827",
+  },
+  doctorQuestionPreview: {
+    fontSize: 13,
+    color: "#4B5563",
+    marginTop: 2,
+  },
+  doctorSeeAllButton: {
+    marginTop: 4,
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#E5E7EB",
+    gap: 4,
+  },
+  doctorSeeAllText: {
+    fontSize: 12,
+    color: "#111827",
+    fontWeight: "500",
+  },
 });
+
+const markdownStyles = {
+  body: {
+    fontSize: 14,
+    color: "#111827",
+  },
+  heading1: {
+    fontSize: 22,
+    fontWeight: "700",
+    marginBottom: 8,
+    color: "#111827",
+  },
+  heading2: {
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 6,
+    marginTop: 10,
+    color: "#111827",
+  },
+  strong: {
+    fontWeight: "700",
+  },
+  em: {
+    fontStyle: "italic",
+  },
+  bullet_list: {
+    marginTop: 6,
+    marginBottom: 6,
+  },
+  list_item: {
+    marginBottom: 2,
+  },
+};

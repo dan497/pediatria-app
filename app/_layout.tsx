@@ -1,21 +1,22 @@
 // app/_layout.tsx
-import React, { useEffect, useState } from "react";
-import { Stack, usePathname, router } from "expo-router";
-import { StatusBar } from "expo-status-bar";
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-} from "react-native";
 import { Ionicons } from "@expo/vector-icons";
+// Ya no usamos LinearGradient
+import { router, Stack, usePathname } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { auth } from "../lib/firebase";
+import React, { useEffect, useState } from "react";
+import {
+  ActivityIndicator,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import {
   SafeAreaProvider,
   SafeAreaView,
 } from "react-native-safe-area-context";
+import { auth } from "../lib/firebase";
 
 type AuthGateProps = {
   children: React.ReactNode;
@@ -34,7 +35,6 @@ function AuthGate({ children }: AuthGateProps) {
     return unsub;
   }, []);
 
-  // Navegación a /login cuando no hay usuario (pero usando useEffect)
   useEffect(() => {
     if (
       !loading &&
@@ -55,12 +55,10 @@ function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  // Si no hay usuario pero estamos en login/register, dejamos que se rendericen esas pantallas
   if (!user && (pathname === "/login" || pathname === "/register")) {
     return <>{children}</>;
   }
 
-  // Si no hay usuario y ya disparamos el replace, mostramos un loader vacío
   if (!user) {
     return (
       <View style={styles.loading}>
@@ -69,7 +67,6 @@ function AuthGate({ children }: AuthGateProps) {
     );
   }
 
-  // Usuario logueado: dejamos pasar todo
   return <>{children}</>;
 }
 
@@ -85,23 +82,43 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <View style={styles.root}>
-        {/* Status bar oscuro para fondo claro */}
+        {/* Status bar con el mismo fondo que la app */}
         <StatusBar style="dark" backgroundColor="#FDF8F5" />
 
         <AuthGate>
-          {/* Zona superior (bajo el notch / Dynamic Island) */}
+          {/* ZONA SUPERIOR */}
           <SafeAreaView style={styles.safeAreaTop} edges={["top"]}>
-            <View style={styles.body}>
-              <Stack screenOptions={{ headerShown: false }} />
+            <View style={styles.appFrame}>
+              {/* APPBAR con mismo background y línea separadora */}
+              <View style={styles.appBar}>
+                {isHome ? (
+                  <TouchableOpacity
+                    style={styles.storeIconButton}
+                    onPress={() => router.push("/store")}
+                  >
+                    <Ionicons name="cart-outline" size={24} color="#111827" />
+                  </TouchableOpacity>
+                ) : (
+                  <View style={{ width: 34 }} />
+                )}
+
+                <View style={styles.appBarCenter} />
+
+                <View style={{ width: 34 }} />
+              </View>
+
+              {/* CONTENIDO */}
+              <View style={styles.body}>
+                <Stack screenOptions={{ headerShown: false }} />
+              </View>
             </View>
           </SafeAreaView>
 
-          {/* Bottom nav solo si no es login/register */}
+          {/* BOTTOM NAV */}
           {!isAuthRoute && (
             <SafeAreaView style={styles.safeAreaBottom} edges={["bottom"]}>
               <View style={styles.bottomNavWrapper}>
-                <View className="bottomNav" style={styles.bottomNav}>
-                  {/* Inicio */}
+                <View style={styles.bottomNav}>
                   <TouchableOpacity
                     style={styles.navItem}
                     onPress={() => router.replace("/")}
@@ -121,7 +138,6 @@ export default function RootLayout() {
                     </Text>
                   </TouchableOpacity>
 
-                  {/* Preguntas */}
                   <TouchableOpacity
                     style={styles.navItem}
                     onPress={() => router.replace("/questions")}
@@ -141,7 +157,6 @@ export default function RootLayout() {
                     </Text>
                   </TouchableOpacity>
 
-                  {/* Perfil */}
                   <TouchableOpacity
                     style={styles.navItem}
                     onPress={() => router.replace("/profile")}
@@ -173,20 +188,48 @@ export default function RootLayout() {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#FDF8F5", // fondo blanco total
+    backgroundColor: "#FDF8F5", // mismo que index
   },
 
-  // Zona superior donde van las pantallas (debajo del notch)
   safeAreaTop: {
     flex: 1,
     backgroundColor: "#FDF8F5",
+  },
+
+  appFrame: {
+    flex: 1,
+    backgroundColor: "#FDF8F5", // todo el fondo igual
   },
 
   body: {
     flex: 1,
   },
 
-  // Zona inferior para que el bottom nav no choque con la barra del iPhone
+  // APPBAR con línea fina abajo
+  appBar: {
+    height: 46,
+    flexDirection: "row",
+    alignItems: "center",
+    paddingHorizontal: 16,
+    backgroundColor: "#FDF8F5",
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#E5E7EB", // línea fina para separar del contenido
+  },
+
+  storeIconButton: {
+    width: 34,
+    height: 34,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  appBarCenter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // BOTTOM NAV
   safeAreaBottom: {
     backgroundColor: "#FDF8F5",
   },
@@ -206,11 +249,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-around",
     alignItems: "center",
-    shadowColor: "#000",
-    shadowOpacity: 0.06,
-    shadowOffset: { width: 0, height: 4 },
-    shadowRadius: 8,
-    elevation: 4,
   },
 
   navItem: {
@@ -229,12 +267,14 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
+  // Loading
   loading: {
     flex: 1,
     backgroundColor: "#FDF8F5",
     justifyContent: "center",
     alignItems: "center",
   },
+
   loadingText: {
     color: "#4B5563",
     marginTop: 8,

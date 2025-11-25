@@ -1,37 +1,37 @@
 // app/chat/[questionId].tsx
-import React, { useEffect, useState, useRef } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import * as ImagePicker from "expo-image-picker";
+import { router, useLocalSearchParams } from "expo-router";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ActivityIndicator,
-  ScrollView,
-  TextInput,
-  TouchableOpacity,
-  KeyboardAvoidingView,
-  Platform,
-  Image,
-  Modal,
-  Animated,
-  Easing,
-} from "react-native";
-import { useLocalSearchParams, router } from "expo-router";
-import {
+  addDoc,
+  collection,
   doc,
   getDoc,
-  collection,
-  query,
-  orderBy,
   onSnapshot,
-  addDoc,
+  orderBy,
+  query,
   serverTimestamp,
   Timestamp,
   updateDoc,
 } from "firebase/firestore";
+import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Animated,
+  Easing,
+  Image,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { auth, db, storage } from "../../lib/firebase";
-import * as ImagePicker from "expo-image-picker";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { Ionicons } from "@expo/vector-icons";
 
 // colores base
 const BG_DARK = "#111827";
@@ -78,12 +78,367 @@ function computeAgeFromBirthDate(birthDateStr?: string): string | undefined {
   }`;
 }
 
+// edad en meses (para crecimiento / vacunas)
+function getAgeInMonths(birthDateStr?: string): number | null {
+  if (!birthDateStr) return null;
+  const parts = birthDateStr.split("-");
+  if (parts.length !== 3) return null;
+
+  const year = parseInt(parts[0], 10);
+  const month = parseInt(parts[1], 10) - 1;
+  const day = parseInt(parts[2], 10);
+
+  const dob = new Date(year, month, day);
+  const today = new Date();
+
+  let years = today.getFullYear() - dob.getFullYear();
+  let months = today.getMonth() - dob.getMonth();
+  const days = today.getDate() - dob.getDate();
+
+  if (days < 0) months -= 1;
+  if (months < 0) {
+    years -= 1;
+    months += 12;
+  }
+
+  return years * 12 + months;
+}
+
 function humanizeSex(sex?: string): string | undefined {
   if (!sex) return undefined;
   if (sex === "femenino") return "Femenino";
   if (sex === "masculino") return "Masculino";
   return "Otro / Prefiere no decir";
 }
+
+function getAvatarUrl(name?: string, fallback: string = "Paciente Pediatría") {
+  const clean = (name && name.trim()) || fallback;
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+    clean
+  )}&background=random&color=ffffff&size=96&bold=true&rounded=true`;
+}
+
+// ------------------------------------
+// GROWTH & VACCINES
+// ------------------------------------
+type GrowthVisitDef = {
+  id: string;
+  label: string;
+  ageFromMonths: number;
+  ageToMonths: number;
+  description: string;
+};
+
+type GrowthRecords = Record<string, boolean>;
+
+const GROWTH_VISITS: GrowthVisitDef[] = [
+  {
+    id: "newborn",
+    label: "Recién nacido",
+    ageFromMonths: 0,
+    ageToMonths: 0,
+    description:
+      "Primera cita a los 7 días del nacimiento o según sea el alta hospitalaria.",
+  },
+  // 1 a 11 meses: controles mensuales
+  {
+    id: "m1",
+    label: "Control de 1 mes",
+    ageFromMonths: 1,
+    ageToMonths: 1,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m2",
+    label: "Control de 2 meses",
+    ageFromMonths: 2,
+    ageToMonths: 2,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m3",
+    label: "Control de 3 meses",
+    ageFromMonths: 3,
+    ageToMonths: 3,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m4",
+    label: "Control de 4 meses",
+    ageFromMonths: 4,
+    ageToMonths: 4,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m5",
+    label: "Control de 5 meses",
+    ageFromMonths: 5,
+    ageToMonths: 5,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m6",
+    label: "Control de 6 meses",
+    ageFromMonths: 6,
+    ageToMonths: 6,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m7",
+    label: "Control de 7 meses",
+    ageFromMonths: 7,
+    ageToMonths: 7,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m8",
+    label: "Control de 8 meses",
+    ageFromMonths: 8,
+    ageToMonths: 8,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m9",
+    label: "Control de 9 meses",
+    ageFromMonths: 9,
+    ageToMonths: 9,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m10",
+    label: "Control de 10 meses",
+    ageFromMonths: 10,
+    ageToMonths: 10,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  {
+    id: "m11",
+    label: "Control de 11 meses",
+    ageFromMonths: 11,
+    ageToMonths: 11,
+    description:
+      "Consulta mensual de crecimiento y desarrollo. Incluye medición antropométrica y vacunas.",
+  },
+  // 12 a 23 meses
+  {
+    id: "12_23m",
+    label: "De 12 a 23 meses",
+    ageFromMonths: 12,
+    ageToMonths: 23,
+    description:
+      "Consulta cada 2–3 meses. Seguimiento de hitos del lenguaje, socialización y nutrición.",
+  },
+  // 2 a 5 años
+  {
+    id: "2_5y",
+    label: "De 2 a 5 años",
+    ageFromMonths: 24,
+    ageToMonths: 59,
+    description:
+      "Al menos cada 6 meses (o más frecuente si hay riesgo). Desarrollo cognitivo, social y nutrición.",
+  },
+  // 5 a 10 años
+  {
+    id: "5_10y",
+    label: "De 5 a 10 años",
+    ageFromMonths: 60,
+    ageToMonths: 120,
+    description:
+      "Al menos una vez al año. Crecimiento, desarrollo puberal, psicomotor y hábitos saludables.",
+  },
+];
+
+type VaccineDose = {
+  id: string;
+  vaccine: string;
+  ageLabel: string;
+  ageMonths: number;
+};
+
+type VaccineRecords = Record<string, boolean>;
+
+const VACCINE_DOSES: VaccineDose[] = [
+  // BCG
+  { id: "bcg_birth", vaccine: "BCG", ageLabel: "Nacimiento", ageMonths: 0 },
+  // Hepatitis B
+  {
+    id: "hepb_birth",
+    vaccine: "Hepatitis B",
+    ageLabel: "Nacimiento",
+    ageMonths: 0,
+  },
+  // Rotavirus
+  {
+    id: "rota_2m",
+    vaccine: "Rotavirus",
+    ageLabel: "2 meses",
+    ageMonths: 2,
+  },
+  {
+    id: "rota_4m",
+    vaccine: "Rotavirus",
+    ageLabel: "4 meses",
+    ageMonths: 4,
+  },
+  // Pentavalente
+  {
+    id: "penta_2m",
+    vaccine: "Pentavalente",
+    ageLabel: "2 meses",
+    ageMonths: 2,
+  },
+  {
+    id: "penta_4m",
+    vaccine: "Pentavalente",
+    ageLabel: "4 meses",
+    ageMonths: 4,
+  },
+  {
+    id: "penta_6m",
+    vaccine: "Pentavalente",
+    ageLabel: "6 meses",
+    ageMonths: 6,
+  },
+  {
+    id: "penta_18m",
+    vaccine: "Pentavalente",
+    ageLabel: "18 meses",
+    ageMonths: 18,
+  },
+  // IPV
+  {
+    id: "ipv_2m",
+    vaccine: "IPV",
+    ageLabel: "2 meses",
+    ageMonths: 2,
+  },
+  {
+    id: "ipv_4m",
+    vaccine: "IPV",
+    ageLabel: "4 meses",
+    ageMonths: 4,
+  },
+  {
+    id: "ipv_6m",
+    vaccine: "IPV",
+    ageLabel: "6 meses",
+    ageMonths: 6,
+  },
+  {
+    id: "ipv_18m",
+    vaccine: "IPV",
+    ageLabel: "18 meses",
+    ageMonths: 18,
+  },
+  {
+    id: "ipv_5y",
+    vaccine: "IPV",
+    ageLabel: "5 años",
+    ageMonths: 60,
+  },
+  // Neumococo
+  {
+    id: "pcv13_2m",
+    vaccine: "Neumococo PCV13",
+    ageLabel: "2 meses",
+    ageMonths: 2,
+  },
+  {
+    id: "pcv13_4m",
+    vaccine: "Neumococo PCV13",
+    ageLabel: "4 meses",
+    ageMonths: 4,
+  },
+  {
+    id: "pcv13_12m",
+    vaccine: "Neumococo PCV13",
+    ageLabel: "12 meses",
+    ageMonths: 12,
+  },
+  // Influenza
+  {
+    id: "flu_6m",
+    vaccine: "Influenza (trivalente)",
+    ageLabel: "6 meses",
+    ageMonths: 6,
+  },
+  {
+    id: "flu_7m",
+    vaccine: "Influenza (trivalente)",
+    ageLabel: "7 meses",
+    ageMonths: 7,
+  },
+  {
+    id: "flu_12m",
+    vaccine: "Influenza (trivalente)",
+    ageLabel: "12 meses",
+    ageMonths: 12,
+  },
+  // Varicela
+  {
+    id: "varicela_12m",
+    vaccine: "Varicela",
+    ageLabel: "12 meses",
+    ageMonths: 12,
+  },
+  {
+    id: "varicela_5y",
+    vaccine: "Varicela",
+    ageLabel: "5 años",
+    ageMonths: 60,
+  },
+  // Hepatitis A
+  {
+    id: "hepa_12m",
+    vaccine: "Hepatitis A",
+    ageLabel: "12 meses",
+    ageMonths: 12,
+  },
+  // SRP
+  {
+    id: "srp_12m",
+    vaccine: "SRP",
+    ageLabel: "12 meses",
+    ageMonths: 12,
+  },
+  {
+    id: "srp_18m",
+    vaccine: "SRP",
+    ageLabel: "18 meses",
+    ageMonths: 18,
+  },
+  // Fiebre amarilla
+  {
+    id: "yellowfever_18m",
+    vaccine: "Fiebre amarilla",
+    ageLabel: "18 meses",
+    ageMonths: 18,
+  },
+  // DPT
+  {
+    id: "dpt_5y",
+    vaccine: "DPT",
+    ageLabel: "5 años",
+    ageMonths: 60,
+  },
+  // COVID
+  {
+    id: "covid_6m",
+    vaccine: "SARS-CoV-2",
+    ageLabel: "Desde 6 meses",
+    ageMonths: 6,
+  },
+];
 
 // ------------------------------------
 // TYPES
@@ -114,6 +469,8 @@ type UserProfile = {
     eps?: string;
   };
   preferences?: { city?: string; language?: string };
+  growthRecords?: GrowthRecords;
+  vaccineRecords?: VaccineRecords;
 };
 
 type ChatMessage = {
@@ -122,7 +479,7 @@ type ChatMessage = {
   imageUrl?: string;
   senderRole: "parent" | "doctor";
   senderName?: string;
-  senderUid?: string;          // ← NUEVO: para saber quién lo envió
+  senderUid?: string;
   createdAt?: Timestamp;
 };
 
@@ -146,14 +503,11 @@ export default function ChatPage() {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
 
-  // FOTO GRANDE
   const [fullImageUrl, setFullImageUrl] = useState<string | null>(null);
 
-  // Rol del usuario actual (doctor / parent)
   const [currentUserRole, setCurrentUserRole] = useState<string>("parent");
-  const [currentUid, setCurrentUid] = useState<string | null>(null); // ← uid actual
+  const [currentUid, setCurrentUid] = useState<string | null>(null);
 
-  // Edición de perfil médico
   const [editingProfile, setEditingProfile] = useState(false);
   const [editBloodType, setEditBloodType] = useState("");
   const [editWeight, setEditWeight] = useState("");
@@ -163,9 +517,9 @@ export default function ChatPage() {
   const [editEPS, setEditEPS] = useState("");
   const [savingProfile, setSavingProfile] = useState(false);
 
-  const scrollRef = useRef<ScrollView | null>(null);
+  const [showVaccineDetails, setShowVaccineDetails] = useState(false);
 
-  // Animación del sheet
+  const scrollRef = useRef<ScrollView | null>(null);
   const slideAnim = useRef(new Animated.Value(0)).current;
 
   // ------------------------------------
@@ -280,7 +634,7 @@ export default function ChatPage() {
             imageUrl: data.imageUrl ?? undefined,
             senderRole: data.senderRole ?? "parent",
             senderName: data.senderName,
-            senderUid: data.senderUid,             // ← leemos senderUid
+            senderUid: data.senderUid,
             createdAt: data.createdAt,
           });
         });
@@ -375,7 +729,7 @@ export default function ChatPage() {
         imageUrl: imageUrl || null,
         senderRole,
         senderName,
-        senderUid: current?.uid || null,     // ← guardamos quién lo envió
+        senderUid: current?.uid || null,
         createdAt: serverTimestamp(),
       });
 
@@ -434,6 +788,44 @@ export default function ChatPage() {
   const childAgeText = computeAgeFromBirthDate(child?.birthDate);
   const sexText = humanizeSex(child?.sex);
 
+  // edad en meses para lógica clínica
+  const ageInMonths = child?.birthDate
+    ? getAgeInMonths(child.birthDate)
+    : null;
+
+  // --------- crecimiento y desarrollo resumen ----------
+  const growthRecords: GrowthRecords = userProfile?.growthRecords || {};
+  let currentGrowthVisit: GrowthVisitDef | null = null;
+  let growthDone: boolean | null = null;
+
+  if (ageInMonths !== null) {
+    currentGrowthVisit =
+      GROWTH_VISITS.find(
+        (g) => ageInMonths >= g.ageFromMonths && ageInMonths <= g.ageToMonths
+      ) || null;
+    if (currentGrowthVisit) {
+      growthDone = !!growthRecords[currentGrowthVisit.id];
+    }
+  }
+
+  // --------- vacunas resumen según edad + listas aplicadas/pendientes ----------
+  const vaccineRecords: VaccineRecords = userProfile?.vaccineRecords || {};
+  let totalDueByAge = 0;
+  let completedByAge = 0;
+  let pendingByAge = 0;
+  let dueByAge: VaccineDose[] = [];
+  let completedDoses: VaccineDose[] = [];
+  let pendingDoses: VaccineDose[] = [];
+
+  if (ageInMonths !== null) {
+    dueByAge = VACCINE_DOSES.filter((d) => d.ageMonths <= ageInMonths);
+    totalDueByAge = dueByAge.length;
+    completedDoses = dueByAge.filter((d) => vaccineRecords[d.id]);
+    pendingDoses = dueByAge.filter((d) => !vaccineRecords[d.id]);
+    completedByAge = completedDoses.length;
+    pendingByAge = pendingDoses.length;
+  }
+
   const openEditProfile = () => {
     setEditBloodType(child?.bloodType || "");
     setEditWeight(child?.weight || "");
@@ -448,6 +840,9 @@ export default function ChatPage() {
   // Animaciones del bottom sheet
   // ------------------------------------
   const openProfileSheetAnimated = () => {
+    // Solo doctores pueden abrir el perfil del niño
+    if (currentUserRole !== "doctor") return;
+
     setShowProfileSheet(true);
     slideAnim.setValue(0);
     Animated.timing(slideAnim, {
@@ -469,6 +864,8 @@ export default function ChatPage() {
     });
   };
 
+  const isDoctor = currentUserRole === "doctor";
+
   // ------------------------------------
   // UI
   // ------------------------------------
@@ -485,17 +882,28 @@ export default function ChatPage() {
             <Ionicons name="chevron-back" size={22} color={ACCENT} />
           </TouchableOpacity>
 
-          <TouchableOpacity
-            style={styles.appBarCenter}
-            onPress={openProfileSheetAnimated}
-          >
-            <Text style={styles.appBarTitle} numberOfLines={1}>
-              {child?.name || "Paciente"}
-            </Text>
-            <Text style={styles.appBarSubtitle} numberOfLines={1}>
-              {childAgeText || "Edad no registrada"}
-            </Text>
-          </TouchableOpacity>
+          {isDoctor ? (
+            <TouchableOpacity
+              style={styles.appBarCenter}
+              onPress={openProfileSheetAnimated}
+            >
+              <Text style={styles.appBarTitle} numberOfLines={1}>
+                {child?.name || "Paciente"}
+              </Text>
+              <Text style={styles.appBarSubtitle} numberOfLines={1}>
+                {childAgeText || "Edad no registrada"}
+              </Text>
+            </TouchableOpacity>
+          ) : (
+            <View style={styles.appBarCenter}>
+              <Text style={styles.appBarTitle} numberOfLines={1}>
+                {doctorName || "Tu pediatra"}
+              </Text>
+              <Text style={styles.appBarSubtitle} numberOfLines={1}>
+                Pediatra
+              </Text>
+            </View>
+          )}
 
           <View style={{ width: 24 }} />
         </View>
@@ -507,7 +915,7 @@ export default function ChatPage() {
             contentContainerStyle={{ paddingBottom: 16 }}
             ref={scrollRef}
           >
-            {/* INICIAL: la dejo siempre a la izquierda */}
+            {/* INICIAL */}
             <View style={styles.bubbleRowLeft}>
               <View style={[styles.bubble, styles.bubbleParentInitial]}>
                 <Text style={styles.bubbleSender}>
@@ -522,14 +930,12 @@ export default function ChatPage() {
             {/* MENSAJES */}
             {messages.map((msg) => {
               const isDoctorMessage = msg.senderRole === "doctor";
-              const isMine =
-                !!currentUid && msg.senderUid === currentUid; // ← posición según quién soy yo
+              const isMine = !!currentUid && msg.senderUid === currentUid;
 
               let senderLabel: string;
 
               if (isDoctorMessage) {
-                const baseName =
-                  msg.senderName || doctorName || "Pediatra";
+                const baseName = msg.senderName || doctorName || "Pediatra";
                 const lower = baseName.toLowerCase();
                 if (lower.startsWith("pediatra ")) {
                   senderLabel = baseName;
@@ -545,9 +951,7 @@ export default function ChatPage() {
                 <View
                   key={msg.id}
                   style={
-                    isMine
-                      ? styles.bubbleRowRight
-                      : styles.bubbleRowLeft
+                    isMine ? styles.bubbleRowRight : styles.bubbleRowLeft
                   }
                 >
                   <View
@@ -655,8 +1059,8 @@ export default function ChatPage() {
           </TouchableOpacity>
         </View>
 
-        {/* PROFILE SHEET ANIMADO */}
-        {showProfileSheet && (
+        {/* PROFILE SHEET ANIMADO (solo doctor) */}
+        {showProfileSheet && currentUserRole === "doctor" && (
           <View style={styles.sheetOverlay}>
             <TouchableOpacity
               style={styles.sheetBackdrop}
@@ -667,6 +1071,7 @@ export default function ChatPage() {
               style={[
                 styles.sheetContainer,
                 {
+                  width: "100%",
                   transform: [
                     {
                       translateY: slideAnim.interpolate({
@@ -678,82 +1083,227 @@ export default function ChatPage() {
                 },
               ]}
             >
-              <View style={styles.sheetHeader}>
-                <Text style={styles.sheetTitle}>Perfil del niño</Text>
+              <View style={styles.sheetHandle} />
 
-                {currentUserRole === "doctor" && (
+              {/* CONTENIDO SCROLLEABLE DEL SHEET */}
+              <ScrollView
+                style={styles.sheetScroll}
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={{ paddingBottom: 16 }}
+              >
+                <View style={styles.sheetHeader}>
                   <TouchableOpacity
-                    style={styles.editButton}
-                    onPress={openEditProfile}
+                    style={styles.sheetCloseButton}
+                    onPress={closeProfileSheetAnimated}
                   >
-                    <Ionicons
-                      name="pencil-outline"
-                      size={18}
-                      color="#111827"
-                    />
+                    <Ionicons name="close" size={20} color="#4B5563" />
                   </TouchableOpacity>
+
+                  <Text style={styles.sheetTitle}>Perfil del niño</Text>
+
+                  {currentUserRole === "doctor" ? (
+                    <TouchableOpacity
+                      style={styles.editButton}
+                      onPress={openEditProfile}
+                    >
+                      <Ionicons
+                        name="pencil-outline"
+                        size={18}
+                        color="#111827"
+                      />
+                    </TouchableOpacity>
+                  ) : (
+                    <View style={{ width: 28 }} />
+                  )}
+                </View>
+
+                <View style={styles.avatarCircle}>
+                  <Image
+                    source={{
+                      uri: getAvatarUrl(child?.name || "Tu peque", "Tu peque"),
+                    }}
+                    style={styles.avatarImage}
+                  />
+                </View>
+
+                <Text style={styles.childName}>
+                  {child?.name || "Sin nombre"}
+                </Text>
+                <Text style={styles.childSub}>
+                  {sexText || "Sexo no registrado"}
+                </Text>
+                <Text style={styles.childSub}>
+                  {childAgeText || "Edad no registrada"}
+                </Text>
+
+                <View style={styles.sheetLine} />
+                <Text style={styles.sheetLabel}>Fecha de nacimiento</Text>
+                <Text style={styles.sheetValue}>
+                  {child?.birthDate || "No registrada"}
+                </Text>
+
+                <View style={styles.sheetLine} />
+                <Text style={styles.sheetLabel}>Peso</Text>
+                <Text style={styles.sheetValue}>
+                  {child?.weight ? `${child.weight} kg` : "No registrado"}
+                </Text>
+
+                <View style={styles.sheetLine} />
+                <Text style={styles.sheetLabel}>Grupo sanguíneo</Text>
+                <Text style={styles.sheetValue}>
+                  {child?.bloodType || "No registrado"}
+                </Text>
+
+                {/* Crecimiento y desarrollo */}
+                <View style={styles.sheetLine} />
+                <Text style={styles.sheetLabel}>Crecimiento y desarrollo</Text>
+                <Text style={styles.sheetValue}>
+                  {ageInMonths === null
+                    ? "Registra la fecha de nacimiento para ver la cita correspondiente."
+                    : currentGrowthVisit
+                    ? `${currentGrowthVisit.label} — ${
+                        growthDone ? "Realizada" : "Pendiente"
+                      }`
+                    : "No hay un control definido para esta edad en este esquema."}
+                </Text>
+
+                {/* Vacunas según edad + Ver más */}
+                <View style={styles.sheetLine} />
+                <Text style={styles.sheetLabel}>Vacunas</Text>
+                <Text style={styles.sheetValue}>
+                  {ageInMonths === null
+                    ? "Registra la fecha de nacimiento para ver el esquema de vacunas."
+                    : totalDueByAge === 0
+                    ? "Todavía no hay dosis programadas para su edad."
+                    : `${completedByAge} de ${totalDueByAge} dosis para su edad (${pendingByAge} pendientes).`}
+                </Text>
+
+                {ageInMonths !== null && totalDueByAge > 0 && (
+                  <>
+                    <TouchableOpacity
+                      style={styles.vaccineMoreButton}
+                      onPress={() =>
+                        setShowVaccineDetails((prev) => !prev)
+                      }
+                    >
+                      <Text style={styles.vaccineMoreButtonText}>
+                        {showVaccineDetails ? "Ver menos" : "Ver más"}
+                      </Text>
+                      <Ionicons
+                        name={
+                          showVaccineDetails ? "chevron-up" : "chevron-down"
+                        }
+                        size={16}
+                        color="#4B5563"
+                      />
+                    </TouchableOpacity>
+
+                    {showVaccineDetails && (
+                      <View style={{ marginTop: 8 }}>
+                        <Text style={styles.vaccineSectionTitle}>
+                          Aplicadas
+                        </Text>
+                        {completedDoses.length === 0 ? (
+                          <Text style={styles.sheetValue}>
+                            Ninguna registrada.
+                          </Text>
+                        ) : (
+                          completedDoses.map((dose) => (
+                            <View
+                              key={dose.id}
+                              style={styles.vaccineItemRow}
+                            >
+                              <Text style={styles.vaccineItemName}>
+                                {dose.vaccine}
+                              </Text>
+                              <Text style={styles.vaccineItemAge}>
+                                {dose.ageLabel}
+                              </Text>
+                            </View>
+                          ))
+                        )}
+
+                        <View style={{ height: 8 }} />
+
+                        <Text style={styles.vaccineSectionTitle}>
+                          Pendientes
+                        </Text>
+                        {pendingDoses.length === 0 ? (
+                          <Text style={styles.sheetValue}>
+                            No hay pendientes registradas.
+                          </Text>
+                        ) : (
+                          pendingDoses.map((dose) => (
+                            <View
+                              key={dose.id}
+                              style={styles.vaccineItemRow}
+                            >
+                              <Text style={styles.vaccineItemName}>
+                                {dose.vaccine}
+                              </Text>
+                              <Text style={styles.vaccineItemAge}>
+                                {dose.ageLabel}
+                              </Text>
+                            </View>
+                          ))
+                        )}
+                      </View>
+                    )}
+                  </>
                 )}
-              </View>
 
-              <View style={styles.avatarCircle} />
+                <View style={styles.sheetLine} />
+                <Text style={styles.sheetLabel}>Padre</Text>
+                <Text style={styles.sheetValue}>
+                  {parent?.name || "—"}
+                </Text>
 
-              <Text style={styles.childName}>
-                {child?.name || "Sin nombre"}
-              </Text>
-              <Text style={styles.childSub}>
-                {sexText || "Sexo no registrado"}
-              </Text>
-              <Text style={styles.childSub}>
-                {childAgeText || "Edad no registrada"}
-              </Text>
+                <View style={styles.sheetLine} />
+                <Text style={styles.sheetLabel}>Ciudad</Text>
+                <Text style={styles.sheetValue}>{prefs?.city || "—"}</Text>
 
-              <View style={styles.sheetLine} />
-              <Text style={styles.sheetLabel}>Fecha de nacimiento</Text>
-              <Text style={styles.sheetValue}>
-                {child?.birthDate || "No registrada"}
-              </Text>
+                {(med?.allergies ||
+                  med?.conditions ||
+                  med?.vaccines ||
+                  med?.eps) && (
+                  <>
+                    <View style={styles.sheetLine} />
+                    <Text style={styles.sheetLabel}>Resumen médico</Text>
 
-              <View style={styles.sheetLine} />
-              <Text style={styles.sheetLabel}>Peso</Text>
-              <Text style={styles.sheetValue}>
-                {child?.weight ? `${child.weight} kg` : "No registrado"}
-              </Text>
+                    <Text style={styles.sheetValue}>
+                      {`Alergias: ${
+                        med?.allergies && med.allergies.trim()
+                          ? med.allergies.trim()
+                          : "no registradas"
+                      }`}
+                    </Text>
 
-              <View style={styles.sheetLine} />
-              <Text style={styles.sheetLabel}>Grupo sanguíneo</Text>
-              <Text style={styles.sheetValue}>
-                {child?.bloodType || "No registrado"}
-              </Text>
+                    <Text style={styles.sheetValue}>
+                      {`Condiciones: ${
+                        med?.conditions && med.conditions.trim()
+                          ? med.conditions.trim()
+                          : "no registradas"
+                      }`}
+                    </Text>
 
-              <View style={styles.sheetLine} />
-              <Text style={styles.sheetLabel}>Padre</Text>
-              <Text style={styles.sheetValue}>{parent?.name || "—"}</Text>
+                    <Text style={styles.sheetValue}>
+                      {`Vacunas: ${
+                        med?.vaccines && med.vaccines.trim()
+                          ? med.vaccines.trim()
+                          : "no registradas"
+                      }`}
+                    </Text>
 
-              <View style={styles.sheetLine} />
-              <Text style={styles.sheetLabel}>Ciudad</Text>
-              <Text style={styles.sheetValue}>{prefs?.city || "—"}</Text>
-
-              {(med?.allergies ||
-                med?.conditions ||
-                med?.vaccines ||
-                med?.eps) && (
-                <>
-                  <View style={styles.sheetLine} />
-                  <Text style={styles.sheetLabel}>Resumen médico</Text>
-                  <Text style={styles.sheetValue}>
-                    {med?.allergies || "Alergias: no registradas"}
-                  </Text>
-                  <Text style={styles.sheetValue}>
-                    {med?.conditions || "Condiciones: no registradas"}
-                  </Text>
-                  <Text style={styles.sheetValue}>
-                    {med?.vaccines || "Vacunas: no registradas"}
-                  </Text>
-                  <Text style={styles.sheetValue}>
-                    {med?.eps || "EPS: no registrada"}
-                  </Text>
-                </>
-              )}
+                    <Text style={styles.sheetValue}>
+                      {`EPS: ${
+                        med?.eps && med.eps.trim()
+                          ? med.eps.trim()
+                          : "no registrada"
+                      }`}
+                    </Text>
+                  </>
+                )}
+              </ScrollView>
             </Animated.View>
           </View>
         )}
@@ -891,7 +1441,7 @@ export default function ChatPage() {
         </View>
       </Modal>
 
-      {/* MODAL DE IMAGEN GRANDE (con botón cerrar) */}
+      {/* MODAL DE IMAGEN GRANDE */}
       <Modal
         visible={!!fullImageUrl}
         transparent
@@ -990,6 +1540,12 @@ const styles = StyleSheet.create({
   },
   chatScroll: {
     flex: 1,
+  },
+
+  avatarImage: {
+    width: "100%",
+    height: "100%",
+    borderRadius: 999,
   },
 
   bubbleRowLeft: {
@@ -1147,12 +1703,34 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
     paddingHorizontal: 24,
-    paddingVertical: 20,
+    paddingTop: 10,
+    paddingBottom: 8,
+    borderTopWidth: 1,
+    borderTopColor: "#E5E7EB",
+    shadowColor: "#000",
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: -6 },
+    elevation: 12,
+    maxHeight: "80%",
+    width: "100%",
+    alignSelf: "stretch",
+  },
+  sheetHandle: {
+    alignSelf: "center",
+    width: 40,
+    height: 4,
+    borderRadius: 999,
+    backgroundColor: "#D1D5DB",
+    marginBottom: 10,
+  },
+  sheetScroll: {
+    maxHeight: "100%",
   },
   sheetHeader: {
     flexDirection: "row",
-    justifyContent: "center",
     alignItems: "center",
+    justifyContent: "space-between",
     marginBottom: 8,
   },
   sheetTitle: {
@@ -1161,10 +1739,13 @@ const styles = StyleSheet.create({
     textAlign: "center",
     color: "#111827",
   },
-  editButton: {
-    position: "absolute",
-    right: 0,
+  sheetCloseButton: {
     padding: 6,
+    borderRadius: 999,
+  },
+  editButton: {
+    padding: 6,
+    borderRadius: 999,
   },
   avatarCircle: {
     width: 120,
@@ -1173,7 +1754,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#E5E7EB",
     alignSelf: "center",
     marginBottom: 12,
+    marginTop: 4,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
   },
+
   childName: {
     fontSize: 20,
     fontWeight: "600",
@@ -1199,6 +1785,47 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#111827",
     marginTop: 2,
+  },
+
+  // Botón "Ver más" vacunas
+  vaccineMoreButton: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 6,
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#D1D5DB",
+    gap: 4,
+  },
+  vaccineMoreButtonText: {
+    fontSize: 13,
+    color: "#4B5563",
+    fontWeight: "500",
+  },
+  vaccineSectionTitle: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: "#374151",
+    marginTop: 4,
+    marginBottom: 4,
+  },
+  vaccineItemRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    paddingVertical: 2,
+  },
+  vaccineItemName: {
+    fontSize: 13,
+    color: "#111827",
+    flex: 1,
+    marginRight: 8,
+  },
+  vaccineItemAge: {
+    fontSize: 12,
+    color: "#6B7280",
   },
 
   // EDIT MODAL
@@ -1263,7 +1890,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
 
-  // FULL IMAGE MODAL (matching palette)
+  // FULL IMAGE MODAL
   fullImageOverlay: {
     flex: 1,
     backgroundColor: "rgba(15,23,42,0.9)",

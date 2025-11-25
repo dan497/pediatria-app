@@ -1,26 +1,26 @@
 // app/profile.tsx
-import { useState, useEffect, useRef } from "react";
+import { Ionicons } from "@expo/vector-icons";
+import { router } from "expo-router";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { useEffect, useRef, useState } from "react";
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
   ActivityIndicator,
-  TouchableOpacity,
-  TextInput,
-  KeyboardAvoidingView,
-  Platform,
-  Modal,
-  Keyboard,
-  TouchableWithoutFeedback,
   Animated,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
   PanResponder,
-    Image, // 👈 agrega esto
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View,
 } from "react-native";
 import { auth, db } from "../lib/firebase";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
-import { router } from "expo-router";
-import { Ionicons } from "@expo/vector-icons";
 
 type ParentInfo = {
   name?: string;
@@ -149,12 +149,16 @@ export default function ProfileScreen() {
       },
     })
   ).current;
-const getAvatarUrl = (name?: string, fallback: string = "Usuario Pediatría") => {
-  const clean = (name && name.trim()) || fallback;
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-    clean
-  )}&background=random&color=ffffff&size=96&bold=true&rounded=true`;
-};
+
+  const getAvatarUrl = (
+    name?: string,
+    fallback: string = "Usuario Pediatría"
+  ) => {
+    const clean = (name && name.trim()) || fallback;
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      clean
+    )}&background=random&color=ffffff&size=96&bold=true&rounded=true`;
+  };
 
   // -------- abrir/cerrar modales ----------
   const openParentModal = () => {
@@ -335,12 +339,14 @@ const getAvatarUrl = (name?: string, fallback: string = "Usuario Pediatría") =>
       setSavingChild(false);
     }
   };
-    const getFaqAvatarUrl = (text: string) => {
-      const clean = text?.trim() || "IA Pediatría";
-      return `https://ui-avatars.com/api/?name=${encodeURIComponent(
-        clean
-      )}&background=random&color=ffffff&size=80&bold=true&rounded=true`;
-    };
+
+  const getFaqAvatarUrl = (text: string) => {
+    const clean = text?.trim() || "IA Pediatría";
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(
+      clean
+    )}&background=random&color=ffffff&size=80&bold=true&rounded=true`;
+  };
+
   if (loading) {
     return (
       <View style={styles.loadingContainer}>
@@ -354,14 +360,9 @@ const getAvatarUrl = (name?: string, fallback: string = "Usuario Pediatría") =>
 
   return (
     <View style={styles.container}>
-      {/* Header */}
+      {/* Header sin icono de volver */}
       <View style={styles.headerRow}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => router.back()}
-        >
-          <Ionicons name="chevron-back" size={22} color="#111827" />
-        </TouchableOpacity>
+        <View style={{ width: 32 }} />
         <Text style={styles.headerTitle}>Perfil</Text>
         <View style={{ width: 32 }} />
       </View>
@@ -747,7 +748,7 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#FDF8F5",
   },
-    avatarImage: {
+  avatarImage: {
     width: "100%",
     height: "100%",
     borderRadius: 999,
@@ -764,13 +765,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 40,
     paddingBottom: 12,
-  },
-  backButton: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    justifyContent: "center",
-    alignItems: "center",
   },
   headerTitle: {
     flex: 1,

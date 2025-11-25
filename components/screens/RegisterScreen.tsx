@@ -1,47 +1,24 @@
-import { useState, useEffect } from "react";
-import {
-  View,
-  Text,
-  TextInput,
-  StyleSheet,
-  TouchableOpacity,
-  Alert,
-  ScrollView,
-  Keyboard,
-  Platform,
-} from "react-native";
-import { Link, router } from "expo-router";
-import { createUserWithEmailAndPassword } from "firebase/auth";
-import { auth, db } from "../../lib/firebase";
-import { doc, setDoc, serverTimestamp } from "firebase/firestore";
-import { Picker } from "@react-native-picker/picker";
 import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
+import { Picker } from "@react-native-picker/picker";
 import * as Notifications from "expo-notifications";
-
-const COLOMBIAN_CITIES = [
-  "Bogotá",
-  "Medellín",
-  "Cali",
-  "Barranquilla",
-  "Cartagena",
-  "Bucaramanga",
-  "Pereira",
-  "Manizales",
-  "Cúcuta",
-  "Santa Marta",
-  "Ibagué",
-  "Pasto",
-  "Montería",
-  "Neiva",
-  "Villavicencio",
-  "Armenia",
-  "Sincelejo",
-  "Valledupar",
-  "Popayán",
-  "Mosquera",
-];
+import { Link, router } from "expo-router";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { doc, serverTimestamp, setDoc } from "firebase/firestore";
+import { useEffect, useState } from "react";
+import {
+  Alert,
+  Keyboard,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { auth, db } from "../../lib/firebase";
 
 export default function RegisterScreen() {
   const [step, setStep] = useState(1);
@@ -87,6 +64,11 @@ export default function RegisterScreen() {
 
   const [loading, setLoading] = useState(false);
 
+  // ciudades desde API
+  const [cities, setCities] = useState<string[]>([]);
+  const [citiesLoading, setCitiesLoading] = useState(false);
+  const [citiesError, setCitiesError] = useState<string | null>(null);
+
   // rango de fechas razonable para pediatría
   const minDob = new Date(2000, 0, 1);
   const maxDob = new Date();
@@ -109,15 +91,9 @@ export default function RegisterScreen() {
     : "Otro / Prefiero no decir";
 
   const weightLabel = !weight ? "Selecciona el peso" : `${weight} kg`;
-
   const bloodLabel = !bloodType ? "Selecciona un grupo" : bloodType;
-
   const cityLabel = !city ? "Selecciona tu ciudad" : city;
-
   const languageLabel = !language ? "Selecciona un idioma" : language;
-  const [cities, setCities] = useState<string[]>([]);
-  const [citiesLoading, setCitiesLoading] = useState(false);
-  const [citiesError, setCitiesError] = useState<string | null>(null);
 
   // 🔍 Validar campos por paso
   const validateStep = () => {
@@ -152,7 +128,7 @@ export default function RegisterScreen() {
       if (!consent) {
         Alert.alert(
           "Consentimiento requerido",
-          "Debes aceptar el tratamiento de datos personales para continuar."
+          "Debes aceptar los Términos y Condiciones y el tratamiento de datos personales para continuar."
         );
         return false;
       }
@@ -246,39 +222,40 @@ export default function RegisterScreen() {
       setLoading(false);
     }
   };
-useEffect(() => {
-  const fetchCities = async () => {
-    try {
-      setCitiesLoading(true);
-      setCitiesError(null);
 
-      const res = await fetch("https://api-colombia.com/api/v1/City");
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        console.log("Error HTTP ciudades:", res.status, txt);
-        throw new Error(`Error HTTP ${res.status}`);
+  // cargar ciudades desde API
+  useEffect(() => {
+    const fetchCities = async () => {
+      try {
+        setCitiesLoading(true);
+        setCitiesError(null);
+
+        const res = await fetch("https://api-colombia.com/api/v1/City");
+        if (!res.ok) {
+          const txt = await res.text().catch(() => "");
+          console.log("Error HTTP ciudades:", res.status, txt);
+          throw new Error(`Error HTTP ${res.status}`);
+        }
+
+        const data = await res.json();
+        console.log("Ciudades API:", data?.length);
+
+        const names: string[] = data
+          .map((c: any) => c.name as string)
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b, "es"));
+
+        setCities(names);
+      } catch (e: any) {
+        console.log("Error cargando ciudades:", e);
+        setCitiesError("No se pudieron cargar las ciudades. Intenta de nuevo.");
+      } finally {
+        setCitiesLoading(false);
       }
+    };
 
-      const data = await res.json();
-      console.log("Ciudades API:", data?.length); // 👈 para ver si llega algo
-
-      const names: string[] = data
-        .map((c: any) => c.name as string)
-        .filter(Boolean)
-        .sort((a, b) => a.localeCompare(b, "es"));
-
-      setCities(names);
-    } catch (e: any) {
-      console.log("Error cargando ciudades:", e);
-      setCitiesError("No se pudieron cargar las ciudades. Intenta de nuevo.");
-    } finally {
-      setCitiesLoading(false);
-    }
-  };
-
-  fetchCities();
-}, []);
-
+    fetchCities();
+  }, []);
 
   const handleNext = () => {
     if (!validateStep()) return;
@@ -312,6 +289,9 @@ useEffect(() => {
               onChangeText={setParentName}
               returnKeyType="done"
               onSubmitEditing={Keyboard.dismiss}
+              autoCapitalize="words"
+              textContentType="name"
+              autoComplete="name"
             />
 
             <Text style={styles.label}>Correo electrónico</Text>
@@ -323,8 +303,10 @@ useEffect(() => {
               keyboardType="email-address"
               value={email}
               onChangeText={setEmail}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
+              returnKeyType="next"
+              autoCorrect={false}
+              textContentType="emailAddress"
+              autoComplete="email"
             />
 
             <Text style={styles.label}>Contraseña</Text>
@@ -335,8 +317,12 @@ useEffect(() => {
               placeholderTextColor="#9CA3AF"
               value={password}
               onChangeText={setPassword}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
+              autoCapitalize="none"
+              autoCorrect={false}
+              // desactivamos strong password/autofill para evitar el cover view bug
+              textContentType="none"
+              autoComplete="off"
+              importantForAutofill="no"
             />
 
             <Text style={styles.label}>Confirmar contraseña</Text>
@@ -347,8 +333,11 @@ useEffect(() => {
               placeholderTextColor="#9CA3AF"
               value={confirm}
               onChangeText={setConfirm}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
+              autoCapitalize="none"
+              autoCorrect={false}
+              textContentType="none"
+              autoComplete="off"
+              importantForAutofill="no"
             />
 
             <Text style={styles.label}>Teléfono</Text>
@@ -361,6 +350,8 @@ useEffect(() => {
               onChangeText={setPhone}
               returnKeyType="done"
               onSubmitEditing={Keyboard.dismiss}
+              textContentType="telephoneNumber"
+              autoComplete="tel"
             />
 
             <Text style={styles.label}>Edad</Text>
@@ -399,12 +390,7 @@ useEffect(() => {
               style={styles.fieldTouchable}
               onPress={() => setShowDobPicker(true)}
             >
-              <Text
-                style={[
-                  styles.fieldText,
-                  !dob && { color: "#9CA3AF" },
-                ]}
-              >
+              <Text style={[styles.fieldText, !dob && { color: "#9CA3AF" }]}>
                 {formattedDob}
               </Text>
             </TouchableOpacity>
@@ -418,6 +404,8 @@ useEffect(() => {
                   onChange={onChangeDob}
                   maximumDate={maxDob}
                   minimumDate={minDob}
+                  themeVariant="light"
+                  textColor="#111827"
                 />
                 {Platform.OS === "ios" && (
                   <TouchableOpacity
@@ -436,12 +424,7 @@ useEffect(() => {
               style={styles.fieldTouchable}
               onPress={() => setShowSexPicker(true)}
             >
-              <Text
-                style={[
-                  styles.fieldText,
-                  !sex && { color: "#9CA3AF" },
-                ]}
-              >
+              <Text style={[styles.fieldText, !sex && { color: "#9CA3AF" }]}>
                 {sexLabel}
               </Text>
             </TouchableOpacity>
@@ -483,12 +466,7 @@ useEffect(() => {
               style={styles.fieldTouchable}
               onPress={() => setShowWeightPicker(true)}
             >
-              <Text
-                style={[
-                  styles.fieldText,
-                  !weight && { color: "#9CA3AF" },
-                ]}
-              >
+              <Text style={[styles.fieldText, !weight && { color: "#9CA3AF" }]}>
                 {weightLabel}
               </Text>
             </TouchableOpacity>
@@ -532,10 +510,7 @@ useEffect(() => {
               onPress={() => setShowBloodPicker(true)}
             >
               <Text
-                style={[
-                  styles.fieldText,
-                  !bloodType && { color: "#9CA3AF" },
-                ]}
+                style={[styles.fieldText, !bloodType && { color: "#9CA3AF" }]}
               >
                 {bloodLabel}
               </Text>
@@ -613,27 +588,7 @@ useEffect(() => {
               onSubmitEditing={Keyboard.dismiss}
             />
 
-            <Text style={styles.label}>Vacunas aplicadas</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="Vacunas recibidas"
-              placeholderTextColor="#9CA3AF"
-              value={vaccines}
-              onChangeText={setVaccines}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
-            />
-
-            <Text style={styles.label}>EPS</Text>
-            <TextInput
-              style={styles.input}
-              placeholder="EPS actual"
-              placeholderTextColor="#9CA3AF"
-              value={eps}
-              onChangeText={setEps}
-              returnKeyType="done"
-              onSubmitEditing={Keyboard.dismiss}
-            />
+   
           </>
         )}
 
@@ -648,65 +603,54 @@ useEffect(() => {
               style={styles.fieldTouchable}
               onPress={() => setShowCityPicker(true)}
             >
-              <Text
-                style={[
-                  styles.fieldText,
-                  !city && { color: "#9CA3AF" },
-                ]}
-              >
+              <Text style={[styles.fieldText, !city && { color: "#9CA3AF" }]}>
                 {cityLabel}
               </Text>
             </TouchableOpacity>
 
-                {showCityPicker && (
-                  <View style={styles.pickerContainer}>
-                    {/* DEBUG opcional para ver el tamaño del array */}
-                    {/* <Text style={{ paddingHorizontal: 16 }}>Ciudades cargadas: {cities.length}</Text> */}
+            {showCityPicker && (
+              <View style={styles.pickerContainer}>
+                <Picker
+                  key={
+                    citiesLoading ? "cities-loading" : `cities-${cities.length}`
+                  }
+                  selectedValue={city}
+                  onValueChange={(value) => setCity(value as string)}
+                  style={styles.pickerWheel}
+                  itemStyle={styles.pickerItem}
+                >
+                  <Picker.Item
+                    label={
+                      citiesLoading
+                        ? "Cargando ciudades..."
+                        : citiesError
+                        ? "Error al cargar ciudades"
+                        : "Selecciona tu ciudad"
+                    }
+                    value=""
+                    color={citiesError ? "#B91C1C" : "#6B7280"}
+                  />
 
-                    <Picker
-                      key={citiesLoading ? "cities-loading" : `cities-${cities.length}`} // 👈 fuerza remount
-                      selectedValue={city}
-                      onValueChange={(value) => setCity(value as string)}
-                      style={styles.pickerWheel}
-                      itemStyle={styles.pickerItem}
-                    >
-                      {/* Placeholder siempre */}
+                  {!citiesLoading &&
+                    !citiesError &&
+                    cities.map((c, idx) => (
                       <Picker.Item
-                        label={
-                          citiesLoading
-                            ? "Cargando ciudades..."
-                            : citiesError
-                            ? "Error al cargar ciudades"
-                            : "Selecciona tu ciudad"
-                        }
-                        value=""
-                        color={citiesError ? "#B91C1C" : "#6B7280"}
+                        key={`${c}-${idx}`}
+                        label={c}
+                        value={c}
+                        color="#111827"
                       />
+                    ))}
+                </Picker>
 
-                      {/* Si ya cargaron y no hay error, pintar la lista */}
-                      {!citiesLoading &&
-                        !citiesError &&
-                        cities.map((c, idx) => (
-                          <Picker.Item
-                            key={`${c}-${idx}`} // 👈 evita problemas por nombres repetidos
-                            label={c}
-                            value={c}
-                            color="#111827"
-                          />
-                        ))}
-                    </Picker>
-
-                    <TouchableOpacity
-                      style={styles.pickerDoneButton}
-                      onPress={() => setShowCityPicker(false)}
-                    >
-                      <Text style={styles.pickerDoneText}>Listo</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
-
-
-
+                <TouchableOpacity
+                  style={styles.pickerDoneButton}
+                  onPress={() => setShowCityPicker(false)}
+                >
+                  <Text style={styles.pickerDoneText}>Listo</Text>
+                </TouchableOpacity>
+              </View>
+            )}
 
             {/* Idioma preferido */}
             <Text style={styles.label}>Idioma preferido</Text>
@@ -715,10 +659,7 @@ useEffect(() => {
               onPress={() => setShowLanguagePicker(true)}
             >
               <Text
-                style={[
-                  styles.fieldText,
-                  !language && { color: "#9CA3AF" },
-                ]}
+                style={[styles.fieldText, !language && { color: "#9CA3AF" }]}
               >
                 {languageLabel}
               </Text>
@@ -737,16 +678,8 @@ useEffect(() => {
                     value=""
                     color="#6B7280"
                   />
-                  <Picker.Item
-                    label="Español"
-                    value="es"
-                    color="#111827"
-                  />
-                  <Picker.Item
-                    label="Inglés"
-                    value="en"
-                    color="#111827"
-                  />
+                  <Picker.Item label="Español" value="es" color="#111827" />
+                  <Picker.Item label="Inglés" value="en" color="#111827" />
                 </Picker>
 
                 <TouchableOpacity
@@ -758,6 +691,166 @@ useEffect(() => {
               </View>
             )}
 
+            {/* Términos y Condiciones + Política de Datos */}
+            <View style={styles.termsCard}>
+              <Text style={styles.termsTitle}>Términos y Condiciones</Text>
+              <Text style={styles.termsSubtitle}>
+                (Versión preliminar para PediOrienta / PediConmigo)
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>Introducción</Text>
+              <Text style={styles.termsText}>
+                Bienvenido a PediOrienta, una aplicación móvil destinada a
+                brindar orientación pediátrica general a padres y cuidadores.
+                Al utilizar la aplicación, aceptas estos Términos y
+                Condiciones.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>Naturaleza del servicio</Text>
+              <Text style={styles.termsText}>
+                PediOrienta ofrece orientación general en salud infantil, basada
+                exclusivamente en la información que tú suministras.{"\n"}
+                {"\n"}El servicio NO constituye:{"\n"}• Consulta médica.{"\n"}•
+                Diagnóstico.{"\n"}• Prescripción de medicamentos.{"\n"}• Orden
+                de exámenes.{"\n"}• Historia clínica.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>
+                Uso adecuado de la plataforma
+              </Text>
+              <Text style={styles.termsText}>
+                El usuario debe:{"\n"}• Proporcionar información completa y
+                verídica.{"\n"}• Ser mayor de edad.{"\n"}• Ser padre, madre o
+                cuidador autorizado del menor.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>
+                Limitación de responsabilidad
+              </Text>
+              <Text style={styles.termsText}>
+                PediOrienta no será responsable por:{"\n"}• Decisiones tomadas
+                por el usuario basadas en la orientación.{"\n"}• Urgencias no
+                atendidas oportunamente.{"\n"}• Errores derivados de
+                información insuficiente proporcionada por el usuario.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>
+                Actualización del servicio
+              </Text>
+              <Text style={styles.termsText}>
+                La empresa podrá modificar funciones de la app sin previo aviso.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>Tarifas</Text>
+              <Text style={styles.termsText}>
+                Las tarifas de paquetes y suscripciones se informan dentro de la
+                aplicación.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>Propiedad intelectual</Text>
+              <Text style={styles.termsText}>
+                Todo el contenido, marca, logos, imágenes y textos pertenecen a
+                PediOrienta.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>
+                Suspensión del servicio
+              </Text>
+              <Text style={styles.termsText}>
+                La empresa puede suspender usuarios que hagan mal uso de la
+                plataforma.
+              </Text>
+
+              <Text style={styles.termsTitle}>
+                Política de Tratamiento de Datos
+              </Text>
+              <Text style={styles.termsSubtitle}>
+                (Ley 1581 de 2012 – Colombia)
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>
+                Responsable del tratamiento
+              </Text>
+              <Text style={styles.termsText}>
+                Nombre: PediOrienta SAS{"\n"}
+                Correo: soporte@pediorienta.com{"\n"}
+                Ciudad: Bogotá, Colombia.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>Datos recolectados</Text>
+              <Text style={styles.termsText}>
+                • Datos del padre/madre: nombre, correo, teléfono,
+                identificación.{"\n"}• Datos del menor: nombre, fecha de
+                nacimiento, sexo.{"\n"}• Información suministrada de manera
+                voluntaria sobre síntomas, hábitos, antecedentes u otra
+                información aportada para recibir orientación.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>
+                Finalidades del tratamiento
+              </Text>
+              <Text style={styles.termsText}>
+                Los datos serán utilizados para:{"\n"}• Brindar orientación
+                pediátrica general dentro de la app.{"\n"}• Acceso a
+                funcionalidades como calendario, recordatorios y seguimiento
+                básico.{"\n"}• Gestión administrativa, operativa y de
+                facturación.{"\n"}• Mejoras del servicio, analítica de uso y
+                optimización de la experiencia.{"\n"}• Cumplimiento de
+                obligaciones legales.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>Datos sensibles</Text>
+              <Text style={styles.termsText}>
+                Los datos de salud y los datos de menores de edad son
+                considerados sensibles. Su suministro es voluntario y la empresa
+                garantiza especial protección conforme a la Ley 1581.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>
+                Derechos del titular
+              </Text>
+              <Text style={styles.termsText}>
+                El usuario podrá:{"\n"}• Conocer los datos personales que reposan
+                en la base de datos.{"\n"}• Solicitar actualización, corrección
+                o eliminación.{"\n"}• Solicitar prueba de la autorización
+                otorgada.{"\n"}• Presentar quejas ante la SIC si considera
+                vulnerados sus derechos.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>Medidas de seguridad</Text>
+              <Text style={styles.termsText}>
+                La empresa implementa medidas técnicas, físicas y
+                administrativas, tales como:{"\n"}• Cifrado de datos en tránsito
+                y en reposo.{"\n"}• Mecanismos de autenticación y control de
+                accesos.{"\n"}• Almacenamiento seguro en servidores
+                certificados.{"\n"}• Protocolos internos de manejo, acceso y
+                eliminación de información.
+              </Text>
+
+              <Text style={styles.termsTitle}>
+                Autorización de Tratamiento de Datos
+              </Text>
+              <Text style={styles.termsText}>
+                Al continuar, declaras que eres el padre, madre o cuidador
+                autorizado del menor cuyos datos registras; autorizas a
+                PediOrienta SAS para recolectar, almacenar y usar tus datos y
+                los del menor con la finalidad de brindar orientación pediátrica
+                general, gestionar el funcionamiento de la app y enviar
+                recordatorios y notificaciones; entiendes que el suministro de
+                datos sensibles es voluntario y que puedes solicitar en
+                cualquier momento la eliminación o actualización de los datos.
+              </Text>
+
+              <Text style={styles.termsSectionTitle}>Aviso de Privacidad</Text>
+              <Text style={styles.termsText}>
+                Tus datos y los de tu hijo serán usados únicamente para brindar
+                orientación pediátrica dentro de la aplicación. No serán
+                compartidos con terceros sin tu autorización. Puedes consultar
+                la Política de Tratamiento de Datos en cualquier momento dentro
+                de la app.
+              </Text>
+            </View>
+
             {/* Checkbox de consentimiento */}
             <View style={styles.checkboxRow}>
               <TouchableOpacity
@@ -767,8 +860,9 @@ useEffect(() => {
                 {consent && <Text style={styles.checkboxCheck}>✓</Text>}
               </TouchableOpacity>
               <Text style={styles.checkboxLabel}>
-                Acepto el tratamiento de mis datos personales según la política
-                de privacidad.
+                Autorizo el tratamiento de mis datos y los de mi hijo(a),
+                declaro que he leído y acepto los Términos y Condiciones,
+                así como la Política de Tratamiento de Datos de PediOrienta SAS.
               </Text>
             </View>
           </>
@@ -812,6 +906,10 @@ useEffect(() => {
   );
 }
 
+const PRIMARY = "#62c6bf";
+const ACCENT_PINK = "#f8b6ba";
+const ACCENT_PURPLE = "#9a72aa";
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -822,18 +920,20 @@ const styles = StyleSheet.create({
   },
   title: {
     fontSize: 26,
-    fontWeight: "600",
+    fontWeight: "700",
     textAlign: "center",
     marginBottom: 16,
+    color: ACCENT_PURPLE,
   },
   form: {
     paddingBottom: 24,
   },
   sectionTitle: {
     fontSize: 18,
-    fontWeight: "500",
+    fontWeight: "600",
     textAlign: "center",
     marginBottom: 16,
+    color: PRIMARY,
   },
   label: {
     fontSize: 14,
@@ -842,20 +942,20 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   input: {
-    backgroundColor: "#F9FAFB",
+    backgroundColor: "#FFFFFF",
     borderRadius: 10,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: ACCENT_PINK,
     color: "#111827",
   },
   fieldTouchable: {
     backgroundColor: "#FDF8F5",
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: "#9CA3AF",
+    borderColor: ACCENT_PINK,
     paddingHorizontal: 14,
     paddingVertical: 12,
     marginBottom: 10,
@@ -876,7 +976,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   pickerDoneText: {
-    color: "#2563EB",
+    color: PRIMARY,
     fontWeight: "600",
   },
   pickerWheel: {
@@ -900,7 +1000,7 @@ const styles = StyleSheet.create({
   },
   button: {
     flex: 1,
-    backgroundColor: "#75e2da",
+    backgroundColor: PRIMARY,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
@@ -913,13 +1013,14 @@ const styles = StyleSheet.create({
   secondaryButton: {
     flex: 0.6,
     borderWidth: 1,
-    borderColor: "#D1D5DB",
+    borderColor: ACCENT_PURPLE,
     paddingVertical: 14,
     borderRadius: 10,
     alignItems: "center",
+    backgroundColor: "#FFFFFF",
   },
   secondaryButtonText: {
-    color: "#4B5563",
+    color: ACCENT_PURPLE,
     fontSize: 15,
     fontWeight: "500",
   },
@@ -933,33 +1034,65 @@ const styles = StyleSheet.create({
     color: "#4B5563",
   },
   footerLink: {
-    color: "#2563EB",
+    color: PRIMARY,
     fontWeight: "600",
   },
   checkboxRow: {
     flexDirection: "row",
-    alignItems: "center",
-    marginTop: 8,
+    alignItems: "flex-start",
+    marginTop: 12,
     marginBottom: 16,
+    gap: 10,
   },
   checkboxBox: {
     width: 22,
     height: 22,
     borderWidth: 2,
-    borderColor: "#2563EB",
+    borderColor: PRIMARY,
     justifyContent: "center",
     alignItems: "center",
     borderRadius: 6,
-    marginRight: 10,
+    marginTop: 2,
   },
   checkboxCheck: {
     fontSize: 16,
-    color: "#2563EB",
+    color: PRIMARY,
     fontWeight: "bold",
   },
   checkboxLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: "#374151",
     flex: 1,
+  },
+  termsCard: {
+    marginTop: 16,
+    padding: 14,
+    borderRadius: 12,
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: ACCENT_PINK,
+  },
+  termsTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: ACCENT_PURPLE,
+    marginBottom: 4,
+  },
+  termsSubtitle: {
+    fontSize: 12,
+    color: "#6B7280",
+    marginBottom: 8,
+  },
+  termsSectionTitle: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: PRIMARY,
+    marginTop: 8,
+    marginBottom: 2,
+  },
+  termsText: {
+    fontSize: 12,
+    color: "#374151",
+    lineHeight: 18,
   },
 });
