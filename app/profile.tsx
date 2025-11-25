@@ -5,6 +5,7 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Image,
   Keyboard,
@@ -20,6 +21,7 @@ import {
   TouchableWithoutFeedback,
   View,
 } from "react-native";
+
 import { auth, db } from "../lib/firebase";
 
 type ParentInfo = {
@@ -340,6 +342,24 @@ export default function ProfileScreen() {
     }
   };
 
+  const handleLogout = () => {
+  Alert.alert(
+    "Cerrar sesión",
+    "¿Estás seguro de que quieres cerrar sesión?",
+    [
+      { text: "Cancelar", style: "cancel" },
+      {
+        text: "Sí, cerrar sesión",
+        style: "destructive",
+        onPress: async () => {
+          await auth.signOut();
+          router.replace("/login");
+        },
+      },
+    ]
+  );
+};
+
   const getFaqAvatarUrl = (text: string) => {
     const clean = text?.trim() || "IA Pediatría";
     return `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -508,7 +528,15 @@ export default function ProfileScreen() {
             </Text>
           </View>
         </View>
-      </ScrollView>
+    {/* BOTÓN DE CERRAR SESIÓN */}
+<View style={styles.logoutWrapper}>
+  <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+    <Text style={styles.logoutText}>Cerrar sesión</Text>
+  </TouchableOpacity>
+</View>
+
+</ScrollView>
+
 
       {/* MODAL EDITAR PADRE/MADRE */}
       <Modal
@@ -924,6 +952,34 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
   },
+
+  logoutWrapper: {
+  marginTop: 16,
+  marginBottom: 40,
+  paddingHorizontal: 16, // 🤍 ahora respeta el safe area igual que el layout
+},
+
+ logoutButton: {
+  backgroundColor: "#FFFFFF",
+  borderRadius: 16,
+  borderWidth: 1,
+  borderColor: "#E5E7EB",
+  paddingVertical: 14,
+  justifyContent: "center",
+  alignItems: "center",
+  shadowColor: "#000",
+  shadowOpacity: 0.06,
+  shadowRadius: 3,
+  elevation: 1,
+},
+
+logoutText: {
+  color: "#DC2626",
+  fontSize: 15,
+  fontWeight: "600",
+},
+
+
   saveButtonText: {
     color: "#111827",
     fontWeight: "600",

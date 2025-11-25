@@ -18,6 +18,7 @@ import { getDownloadURL, ref, uploadBytes } from "firebase/storage";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   Image,
@@ -31,6 +32,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+
 import { auth, db, storage } from "../../lib/firebase";
 
 // colores base
@@ -655,23 +657,70 @@ export default function ChatPage() {
   // ------------------------------------
   // Pick image
   // ------------------------------------
-  const handlePickImage = async () => {
-    const { status } =
-      await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== "granted") {
-      alert("Necesitamos permiso para acceder a tus fotos.");
-      return;
-    }
+ // ------------------------------------
+// Pick image / Camera
+// ------------------------------------
+const pickFromLibrary = async () => {
+  const { status } =
+    await ImagePicker.requestMediaLibraryPermissionsAsync();
+  if (status !== "granted") {
+    alert("Necesitamos permiso para acceder a tus fotos.");
+    return;
+  }
 
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 0.7,
-    });
+  const result = await ImagePicker.launchImageLibraryAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    quality: 0.7,
+  });
 
-    if (!result.canceled && result.assets && result.assets.length > 0) {
-      setSelectedImage(result.assets[0].uri);
-    }
-  };
+  if (!result.canceled && result.assets && result.assets.length > 0) {
+    setSelectedImage(result.assets[0].uri);
+  }
+};
+
+const takePhoto = async () => {
+  const { status } = await ImagePicker.requestCameraPermissionsAsync();
+  if (status !== "granted") {
+    alert("Necesitamos permiso para usar la cámara.");
+    return;
+  }
+
+  const result = await ImagePicker.launchCameraAsync({
+    mediaTypes: ImagePicker.MediaTypeOptions.Images,
+    quality: 0.7,
+  });
+
+  if (!result.canceled && result.assets && result.assets.length > 0) {
+    setSelectedImage(result.assets[0].uri);
+  }
+};
+
+const openImageOptions = () => {
+  if (uploadingImage) return;
+
+  Alert.alert(
+    "Adjuntar imagen",
+    "Elige cómo quieres añadir la imagen",
+    [
+      {
+        text: "Tomar foto",
+        onPress: () => {
+          void takePhoto();
+        },
+      },
+      {
+        text: "Elegir de la galería",
+        onPress: () => {
+          void pickFromLibrary();
+        },
+      },
+      {
+        text: "Cancelar",
+        style: "cancel",
+      },
+    ]
+  );
+};
 
   // ------------------------------------
   // ENVIAR MENSAJE
@@ -1022,11 +1071,12 @@ export default function ChatPage() {
 
         {/* INPUT BAR */}
         <View style={styles.inputBar}>
-          <TouchableOpacity
-            style={styles.imageButton}
-            onPress={handlePickImage}
-            disabled={uploadingImage}
-          >
+         <TouchableOpacity
+  style={styles.imageButton}
+  onPress={openImageOptions}
+  disabled={uploadingImage}
+>
+
             {uploadingImage ? (
               <ActivityIndicator size="small" color="#6B7280" />
             ) : (
