@@ -4,8 +4,8 @@
 ![Firebase](https://img.shields.io/badge/Firebase-Auth-orange)
 ![Status](https://img.shields.io/badge/Status-MVP%20Development-green)
 
-Pediatría App es una aplicación móvil diseñada para apoyar a **familias y pediatras** con información clara, accesible y confiable sobre salud infantil.  
-Incluye un **chatbot con IA**, selección de ciudad, FAQs, navegación intuitiva y herramientas útiles para acompañar el crecimiento del niño.
+Pediatría App es una aplicación móvil diseñada para apoyar a **familias** con información clara, accesible y confiable sobre salud infantil.  
+Incluye **IA**, selección de ciudad, FAQs, navegación intuitiva y herramientas útiles para acompañar el crecimiento del niño.
 
 Este proyecto hace parte del **Third Term Project 2025 – MVP Mobile App Development**.
 
@@ -14,14 +14,11 @@ Este proyecto hace parte del **Third Term Project 2025 – MVP Mobile App Develo
 ## 🚀 Características principales
 
 - 🔐 **Autenticación** con Firebase  
-- 🤖 **Chatbot con IA** (Gemini / OpenAI) para preguntas frecuentes  
+- 🤖 **IA** (Gemini / OpenAI) para recomendaciones frecuentes  
 - 🌍 **Selector de ciudad** con integración a API  
-- 📂 **Datos offline** con AsyncStorage  
 - 🔔 **Notificaciones locales y/o push**  
 - 📸 **QR / cámara** mediante `expo-barcode-scanner`  
 - 🧭 Navegación avanzada con **Expo Router**  
-- 🎨 UI coherente con prototipo en Figma  
-- 🌐 Uso de API externa + librería externa  
 - 📱 Compatible con iOS / Android
 
 ---
@@ -35,7 +32,7 @@ Este proyecto hace parte del **Third Term Project 2025 – MVP Mobile App Develo
 - **Expo Notifications**
 - **AsyncStorage / SQLite**
 - **Axios**
-- **Gemini / OpenAI API**
+- **Gemini API**
 - **expo-barcode-scanner**
 
 ---
@@ -95,7 +92,6 @@ Incluye:
 - Arquitectura  
 - Pruebas con usuarios  
 - Modelo de negocio  
-- Pitch  
 
 ---
 
@@ -103,6 +99,9 @@ Incluye:
 
 Proyecto desarrollado por:  
 **Santiago Peña Beltrán**  
+Ingeniería Informática – Universidad de La Sabana
+
+**Daniel Santiago Riveros Rodriguez**  
 Ingeniería Informática – Universidad de La Sabana
 
 ---
